@@ -1,0 +1,94 @@
+---
+title: "load and trim COI and 18S"
+output: html_document
+date: "2022-10-26"
+---
+
+
+```{r load libraries}
+library(insect)
+library(ape)
+library(here)
+here()
+```
+
+
+```{r read data}
+here()
+MZG_18S <- readFASTA(here("qiime2/MZGfasta-18s__MZGdbALL__o07__A_CCE_combo.fasta"))
+```
+
+
+```{r define primers}
+#Zhan et al. 2013
+forward_zhan18S <- "AGGGCAAKYCTGGTGCCAGC" #Uni18S
+reverse_zhan18S <- "GRCGGTATCTRATCGYCTT" #Uni18SR
+
+forward_fullCOIdeg <- "TITCIACIAAYCAYAARGAY" #TITCIACIAAYCAYAARGAYATTGG
+forward_fullCOI <- "GGTCAACAAATCATAAAGATATTGG" #GGTCAACAAATCATAAAGATATTGG
+
+#Leray et al. 2013
+forward_lerayCOI <- "GGWACWGGWTGAACWGTWTAYCCYCC" #mlCOIintF
+reverse_lerayCOI <- "TAIACYTCIGGRTGICCRAARAAYCA" #jgHCO2198
+forward_lerayCOI <- "GGWACWGGWTGAACWGTWTAYCCYCC" #mlCOIintF
+reverse_lerayCOI <- "TAIACYTCIGGRTGICCRAARAAYCA" #jgHCO2198
+
+#other COI
+forward_fullCOIdeg <- "TITCIACIAAYCAYAARGAYATTGG" #universal forward (degenerate)
+forward_fullCOI <- "GGTCAACAAATCATAAAGATATTGG" #universal forward
+```
+
+
+```{r}
+MZG_18S_zhan <- virtualPCR(MZG_18S, up = forward_zhan18S, down = reverse_zhan18S)
+#16115 retained, vs 15015 with "trim" command
+
+MZG_COI_leray <- virtualPCR(MZG_COI, up = forward_lerayCOI, down = reverse_lerayCOI)
+#56313 retained, vs 3762 with "trim" command
+
+#MZG_COI_unideg <- virtualPCR(MZG_COI, up = forward_fullCOIdeg, down = reverse_lerayCOI)
+
+#MZG_COI_uni <- virtualPCR(MZG_COI, up = forward_fullCOI, down = reverse_lerayCOI)
+length(MZG_COI_leray)
+length(MZG_COI_leray)/length(MZG_COI)
+length(MZG_18S_zhan)
+length(MZG_18S_zhan)/length(MZG_18S)
+
+#length(MZG_COI_unideg)/length(MZG_COI)
+#vlength(MZG_COI_uni)/length(MZG_COI)
+
+```
+
+
+
+```{r}
+write.dna(MZG_COI_leray, file = '~/Documents/databases/MetaZooGene26Oct2022/Leray_COI_MetaZooGene_lower.fasta', format = 'fasta', colsep = "")
+write.dna(MZG_18S_zhan, file = here('qiime2/ZHAN_18S_MetaZooGene_lower_8_23_2023.fasta'), format = 'fasta', colsep = "")
+
+#cat(file="~/Documents/databases/MetaZooGene26Oct2022/Leray_COI_MetaZooGene.fasta", paste(paste0(">",names(MZG_COI_leray)),sapply(leray, paste, collapse=""), sep="\n"), sep="\n");
+#cat(file="~/Documents/databases/MetaZooGene26Oct2022/ZHAN_COI_MetaZooGene.fasta", paste(paste0(">",names(MZG_18S_zhan)),sapply(leray, paste, collapse=""), sep="\n"), sep="\n");
+
+beepr::beep()
+```
+
+use: awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' in.fna > out.fna 
+to convert to uppercase
+
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' Leray_COI_MetaZooGene_lower.fasta > Leray_COI_MetaZooGene.fasta 
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' ZHAN_18S_MetaZooGene_lower_8_23_2023.fasta > ZHAN_18S_MetaZooGene_lower_8_23_2023_upper.fasta 
+
+```{r test for allen lab}
+
+#Allen COI 
+forward_allen <- "CCAGCASCYGCGGTAATTCC"
+reverse_allen <- "ACTTTCGTTCTTGATYR"
+
+MZG_18S_allen <- virtualPCR(MZG_18S, up = forward_allen, down = reverse_allen)
+
+length(MZG_18S_allen)
+length(MZG_18S_allen)/length(MZG_18S)
+
+write.dna(MZG_18S_allen, file = '~/Documents/databases/MetaZooGene26Oct2022/Allen_18S_MetaZooGene_lower.fasta', format = 'fasta', colsep = "")
+beepr::beep()
+
+```
