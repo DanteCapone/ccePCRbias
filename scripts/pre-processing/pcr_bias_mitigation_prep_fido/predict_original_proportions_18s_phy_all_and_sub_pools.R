@@ -1,8 +1,7 @@
 
+#Script Using Fido to Predict the DNA Proportions in each sample at PCR Cycle 0
+
 # Libraries, data, etc ----------------------------------------------------
-
-
-
 
 library(tidyverse)
 library(lubridate)
@@ -18,14 +17,19 @@ here()
 
 
 
-###Load in the ECDF-filtered data for the 18s primer using long format species and hash name so I ca identify taxa
+###Load in the filtered data for the 18s primer using long format species and hash name so I ca identify taxa
 ##First Size 1
-#Phyloseq Filtered
-fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s1_ecdf_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+
+fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1)%>%
+  #11/2024 sum in Salpidae
+  mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
+  group_by(Family) %>%
+  summarise(across(everything(), sum, na.rm = TRUE)) %>%
+  ungroup() %>%
   column_to_rownames("Family")
 
 #Metadata
-meta_18s=read.csv(file.path("data/fido/sub_pools/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt))
 colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
@@ -44,9 +48,6 @@ Y_s1=fido_input_filt%>% as.matrix()
 
 
 #Fit pibble model 
-##MPN: Please remind me how did you choose the 20? Was it using the log marginal likelihood? If so, that code should probably be included here. Happy to chat about this more.
-##MPN: This is assuming the default priors for Theta, upsilon, and Xi. Probably reasonable here, but, may want to look in prior predictive checks
-##Basically, would run this. These first few rows are just setting the defaults (which fido auto does in the line you have)
 #Loop thru values for Gamma
 gamma <- c(1,2,3,5,8,10,15,20,50,100,200,300,400,500,700,1000)
 logML <- rep(NA, length(gamma))
@@ -70,7 +71,7 @@ Theta <- matrix(0, nrow(Y_s1)-1, nrow(X))
 priors <- pibble(NULL, X, Gamma = gamma*diag(nrow(X)), upsilon = upsilon, Theta = Theta, Xi = Xi, n_samples = 10000)
 print(priors)
 priors <- to_clr(priors)
-summary(priors, pars="Lambda", gather_prob=TRUE, as_factor=TRUE, use_names=TRUE)  
+#summary(priors, pars="Lambda", gather_prob=TRUE, as_factor=TRUE, use_names=TRUE)  
 ##Looks ok, centered at zero
 ##end of added code
 
@@ -163,7 +164,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s1,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s1_phy_all_and_subpools.csv")))
+write.csv(final_data_s1,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s1_phy_all_and_subpools.csv")))
 
 
 
@@ -171,20 +172,24 @@ write.csv(final_data_s1,here(paste0("data/predicted_og/predicted_og_18s_",curren
 
 
 
-############### Let's repeat for other sizes now ###############
+# Repeat for other sizes
 
 ############First 0.5-1############
 #Phyloseq Filtered
-fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s2_ecdf_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+  #11/2024 sum in Salpidae
+  mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
+  group_by(Family) %>%
+  summarise(across(everything(), sum, na.rm = TRUE)) %>%
+  ungroup() %>%
   column_to_rownames("Family")
 
-
 #Metadata
-#Metadata
-meta_18s=read.csv(file.path("data/fido/sub_pools/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt))
 colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
+
 
 ##Next, we need to make sure that the orders are the same between meta_18s and fido_input_filt
 meta_18s <- meta_18s[match(colnames(fido_input_filt), meta_18s$Sample_name),]
@@ -208,7 +213,7 @@ Theta <- matrix(0, nrow(Y_s2)-1, nrow(X))
 priors <- pibble(NULL, X, Gamma = 20*diag(nrow(X)), upsilon = upsilon, Theta = Theta, Xi = Xi, n_samples = 10000)
 print(priors)
 priors <- to_clr(priors)
-summary(priors, pars="Lambda", gather_prob=TRUE, as_factor=TRUE, use_names=TRUE)  
+#summary(priors, pars="Lambda", gather_prob=TRUE, as_factor=TRUE, use_names=TRUE)  
 ##Looks ok, centered at zero
 ##end of added code
 
@@ -306,7 +311,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s2,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools.csv")))
+write.csv(final_data_s2,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools.csv")))
 
 
 
@@ -316,16 +321,21 @@ write.csv(final_data_s2,here(paste0("data/predicted_og/predicted_og_18s_",curren
 ######### Final size
 ##### 1-2mm####
 #Phyloseq Filtered
-fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s3_ecdf_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+  #11/2024 sum in Salpidae
+  mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
+  group_by(Family) %>%
+  summarise(across(everything(), sum, na.rm = TRUE)) %>%
+  ungroup() %>%
   column_to_rownames("Family")
 
+
 #Metadata
-#Metadata
-meta_18s=read.csv(file.path("data/fido/sub_pools/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt))
 colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
-colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
+
 
 ##Next, we need to make sure that the orders are the same between meta_18s and fido_input_filt
 meta_18s <- meta_18s[match(colnames(fido_input_filt), meta_18s$Sample_name),]
@@ -344,7 +354,7 @@ Theta <- matrix(0, nrow(Y_s3)-1, nrow(X))
 priors <- pibble(NULL, X, Gamma = 20*diag(nrow(X)), upsilon = upsilon, Theta = Theta, Xi = Xi, n_samples = 10000)
 print(priors)
 priors <- to_clr(priors)
-summary(priors, pars="Lambda", gather_prob=TRUE, as_factor=TRUE, use_names=TRUE)  
+#summary(priors, pars="Lambda", gather_prob=TRUE, as_factor=TRUE, use_names=TRUE)  
 ##Looks ok, centered at zero
 ##end of added code
 
@@ -365,7 +375,6 @@ fit_prop_1 <- to_proportions(fit_s3)
 
 #Select sample to predict on
 #Sample select
-sample_sel="sample_numC1.T7.H9_s3"
 
 
 
@@ -442,4 +451,5 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s3,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools.csv")))
+write.csv(final_data_s3,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools.csv")))
+

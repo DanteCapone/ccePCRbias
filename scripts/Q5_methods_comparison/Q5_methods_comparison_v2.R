@@ -8,9 +8,9 @@ librarian::shelf(tidyverse, googledrive, stringr,here,phyloseq,
                  extrafont, RColorBrewer, fido, compositions, ggpubr)
 
 #Add functions for myself
-source(("scripts/helpful_functions/treemap_funs_Capone.R"))
-source("scripts/helpful_functions/phyloseq_mapping_funs.R")
-source("scripts/helpful_functions/general_helper_functions.R")
+source(("PCR_bias_correction/scripts/helpful_functions/treemap_funs_Capone.R"))
+source("PCR_bias_correction/scripts/helpful_functions/phyloseq_mapping_funs.R")
+source("PCR_bias_correction/scripts/helpful_functions/general_helper_functions.R")
 
 saving=0
 
@@ -18,7 +18,7 @@ saving=0
 # Load in the data -----------------------------------------------------
 
 #Metadata
-metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.2.2023_for_map.csv"))%>%
+metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env_metadata_impute_phyloseq_6.2.2023_for_map.csv"))%>%
   select(-X, -Sizefractionmm,max_size) %>%
   mutate(Sample_ID=Sample_ID_dot) %>%
   distinct(.) %>%
@@ -26,26 +26,42 @@ metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phy
   mutate(PC1=PC1*-1)
 
 #Add depth
-depths=read.csv(here("data/physical_environmental_data/sample_depths.csv")) %>%
+depths=read.csv(here("PCR_bias_correction/data/physical_environmental_data/sample_depths.csv")) %>%
   select(-X) %>%
   mutate(Sample_ID_short=Sample_ID)
 
 
 #Volume filtered (add to metadata)
-volume_filtered=read.csv(here("data/raw_data/biomass/p2107_bt_volume_filtered.csv"))
+volume_filtered=read.csv(here("PCR_bias_correction/data/raw_data/biomass/p2107_bt_volume_filtered.csv"))
 
 #Dryweights
-dryweights=read.csv("data/raw_data/biomass/dryweights_forzoopmetab.csv") %>%
-  mutate(biomass_dry=8/3*biomass_dry)
+dryweights=read.csv("PCR_bias_correction/data/raw_data/biomass/dryweights_forzoopmetab.csv") %>%
+  mutate(biomass_dry=8/3*biomass_dry) %>% 
+  left_join(.,volume_filtered, by = c("Sample_ID_short"))%>% 
+  left_join(.,depths, by="Sample_ID_short") %>%
+  mutate(biomass_dry = replace(biomass_dry, which(biomass_dry<0), NA)) %>% 
+  #Replace missing tow depths with 210
+  mutate(depth = replace(depth, which(is.na(depth)), 210)) %>%
+  mutate(biomass_mg_m2=biomass_dry/Volume_Filtered_m3*210) %>%
+  select(-Sample_ID) %>% 
+  #Add size fraction that will match with Zooscan
+  rename(size_fraction_numeric = size_fraction) %>% # Rename the existing column
+  mutate(
+    size_fraction = case_when(
+      size_fraction_numeric %in% c(0.2, 0.5) ~ "0.2-1", # Combine 0.2 and 0.5
+      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-5", # Assign 1-5
+      TRUE ~ NA_character_ # Handle any unexpected values
+    )
+  )
 
-env_metadata=metadata %>% left_join(.,volume_filtered, by="Sample_ID_short") %>%
+metadata=metadata %>% 
   left_join(.,dryweights, by = c("Sample_ID_short","max_size"))%>% 
   left_join(.,depths, by="Sample_ID_short") %>%
   mutate(biomass_dry = replace(biomass_dry, which(biomass_dry<0), NA)) %>%
   mutate(biomass_mg_m2=biomass_dry/Volume_Filtered_m3*210) %>%
   select(-Sample_ID.y) %>%
-  mutate(Sample_ID=Sample_ID.x)
-
+  mutate(Sample_ID=Sample_ID.x) %>% 
+  column_to_rownames("Sample_ID")
 
 
 
@@ -58,19 +74,19 @@ env_metadata=metadata %>% left_join(.,volume_filtered, by="Sample_ID_short") %>%
 #Using family
 
 #Taxa file from pre-processed fido families for 18S
-zhan_taxa=read.csv(here("data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))  %>% 
+zhan_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))  %>% 
   select(-X) %>% 
   distinct() %>% 
   column_to_rownames("Family")
 
 #CLR
-fido_s1=read.csv(here("data/predicted_og/clr/predicted_og_18s_04_29_2024_s1_phy_all_and_subpools_clr.csv")) %>%
+fido_s1=read.csv(here("PCR_bias_correction/data/predicted_og/clr/predicted_og_18s_04_29_2024_s1_phy_all_and_subpools_clr.csv")) %>%
   select(-X) %>% 
   mutate(coord=str_remove(coord, "^clr_"))
-fido_s2=read.csv(here("data/predicted_og/clr/predicted_og_18s_04_29_2024_s2_phy_all_and_subpools_clr.csv")) %>%
+fido_s2=read.csv(here("PCR_bias_correction/data/predicted_og/clr/predicted_og_18s_04_29_2024_s2_phy_all_and_subpools_clr.csv")) %>%
   select(-X)%>% 
   mutate(coord=str_remove(coord, "^clr_"))
-fido_s3=read.csv(here("data/predicted_og/clr/predicted_og_18s_04_29_2024_s3_phy_all_and_subpools_clr.csv")) %>%
+fido_s3=read.csv(here("PCR_bias_correction/data/predicted_og/clr/predicted_og_18s_04_29_2024_s3_phy_all_and_subpools_clr.csv")) %>%
   select(-X)%>% 
   mutate(coord=str_remove(coord, "^clr_"))
 
@@ -83,7 +99,7 @@ phy_taxa_pcr= final_data_all_sizes %>%
   # filter(str_detect(coord, "Calanoida")) %>%
   filter(cycle_num==0) %>% 
   mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) %>%
-  left_join(.,env_metadata, by="Sample_ID")%>%
+  left_join(.,metadata, by="Sample_ID")%>%
   mutate(taxa = coord)
 
 #Filter to calanoida
@@ -102,13 +118,13 @@ pcr_join_clr=taxa_pcr %>%
 
 
 #Proportions
-fido_s1=read.csv(here("data/predicted_og/predicted_og_18s_04_17_2024_s1_phy_all_and_subpools.csv")) %>%
+fido_s1=read.csv(here("PCR_bias_correction/data/predicted_og/predicted_og_18s_04_17_2024_s1_phy_all_and_subpools.csv")) %>%
   select(-X) %>% 
   mutate(coord=str_remove(coord, "^clr_"))
-fido_s2=read.csv(here("data/predicted_og/predicted_og_18s_04_17_2024_s2_phy_all_and_subpools.csv")) %>%
+fido_s2=read.csv(here("PCR_bias_correction/data/predicted_og/predicted_og_18s_04_17_2024_s2_phy_all_and_subpools.csv")) %>%
   select(-X)%>% 
   mutate(coord=str_remove(coord, "^clr_"))
-fido_s3=read.csv(here("data/predicted_og/predicted_og_18s_04_17_2024_s3_phy_all_and_subpools.csv")) %>%
+fido_s3=read.csv(here("PCR_bias_correction/data/predicted_og/predicted_og_18s_04_17_2024_s3_phy_all_and_subpools.csv")) %>%
   select(-X)%>% 
   mutate(coord=str_remove(coord, "^clr_"))
 
@@ -120,7 +136,7 @@ final_data_all_sizes=rbind(fido_s1,fido_s2,fido_s3) %>%
 phy_taxa_pcr= final_data_all_sizes %>%
   filter(cycle_num==0) %>% 
   mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) %>%
-  left_join(.,env_metadata, by="Sample_ID")%>%
+  left_join(.,metadata, by="Sample_ID")%>%
   mutate(taxa = coord)
 
 #Filter to calanoida
@@ -135,7 +151,19 @@ pcr_join_prop=taxa_pcr %>%
   group_by(Sample_ID,size_fraction,PC1,cycle) %>%
   summarise(n_reads_pcr=sum(n_reads),
             p.2.5=min(p2.5),
-            p.97.5=max(p97.5))
+            p.97.5=max(p97.5))%>%
+  #Add size fraction that will match with Zooscan
+  rename(size_fraction_numeric = size_fraction) %>% # Rename the existing column
+  mutate(
+    size_fraction = case_when(
+      size_fraction_numeric %in% c(0.2, 0.5) ~ "0.2-1", # Combine 0.2 and 0.5
+      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-5", # Assign 1-5
+      TRUE ~ NA_character_ # Handle any unexpected values
+    )
+  )
+
+
+
 
 
 
@@ -144,7 +172,7 @@ pcr_join_prop=taxa_pcr %>%
 # =========== Raw Reads Relative Abundance Data using taxa that went into fido model
 
 #Predicted proportions
-fido_s1_raw=read.csv(here("data/fido/phy/fido_18s_s1_ecdf_family_phy_all_subpools.csv")) %>% 
+fido_s1_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_ecdf_family_phy_all_subpools.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Family, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -154,7 +182,7 @@ fido_s1_raw=read.csv(here("data/fido/phy/fido_18s_s1_ecdf_family_phy_all_subpool
   pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
 
 
-fido_s2_raw=read.csv(here("data/fido/phy/fido_18s_s2_ecdf_family_phy_all_subpools.csv")) %>% 
+fido_s2_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_ecdf_family_phy_all_subpools.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Family, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -164,7 +192,7 @@ fido_s2_raw=read.csv(here("data/fido/phy/fido_18s_s2_ecdf_family_phy_all_subpool
   pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
 
 
-fido_s3_raw=read.csv(here("data/fido/phy/fido_18s_s3_ecdf_family_phy_all_subpools.csv")) %>% 
+fido_s3_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_ecdf_family_phy_all_subpools.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Family, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -182,27 +210,57 @@ merge(fido_s1_raw, fido_s2_raw, by = "Family", all = TRUE) %>%
 
 
 #Metadata
-env_metadata_phy=env_metadata %>%
-  column_to_rownames("Sample_ID_dot")
+env_metadata_phy=metadata %>%
+  mutate(
+    size_fraction = case_when(
+      size_fraction_numeric %in% c(0.2, 0.5) ~ "0.2-1", # Combine 0.2 and 0.5
+      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-5", # Assign 1-5
+      TRUE ~ NA_character_ # Handle any unexpected values
+    )
+  )
 
 #Make phyloseq objects
 OTU = otu_table(as.matrix(fido_18s_merged_raw), taxa_are_rows = TRUE)
 TAX = tax_table(as.matrix(zhan_taxa))
 meta=sample_data(env_metadata_phy)
 
+#Raw in counts
+phy_18s_raw_counts=phyloseq(OTU, TAX, meta) %>% 
+  phyloseq_transform_to_long(.) %>%
+  mutate(Family=asv_code) %>% 
+  select(-asv_code) %>% 
+  mutate(Sample_ID=Sample_ID.x) 
+
 
 #Raw in Proportions
 phy_18s=transform_sample_counts(phyloseq(OTU, TAX, meta), function(x) x / sum(x))%>%
   phyloseq_transform_to_long(.) %>%
   mutate(Family=asv_code) %>%
-  select(-asv_code)
+  select(-asv_code)%>%
+  #Add size fraction that will match with Zooscan
+  mutate(
+    size_fraction = case_when(
+      size_fraction_numeric %in% c(0.2, 0.5) ~ "0.2-1", # Combine 0.2 and 0.5
+      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-5", # Assign 1-5
+      TRUE ~ NA_character_ # Handle any unexpected values
+    )
+  ) %>% 
+  mutate(Sample_ID=Sample_ID.x) 
 
 
 #Raw in CLR
 phy_18s_clr=phyloseq(OTU, TAX, meta) %>% 
   tax_glom(taxrank="Order", NArm=TRUE) %>%
   transform_sample_counts(., clr_convert)%>%
-  phyloseq_transform_to_long(.)
+  phyloseq_transform_to_long(.)%>%
+  #Add size fraction that will match with Zooscan
+  mutate(
+    size_fraction = case_when(
+      size_fraction_numeric %in% c(0.2, 0.5) ~ "0.2-1", # Combine 0.2 and 0.5
+      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-5", # Assign 1-5
+      TRUE ~ NA_character_ # Handle any unexpected values
+    )
+  )
 
 #Filter to calanoid copepods
 taxa_sel="Calanoida"
@@ -225,7 +283,25 @@ phy_18s %>%
   select(-size_fraction.x) %>%
   mutate(size_fraction=size_fraction.y)->pcr_and_raw_18s
 
+#Join in counts
+phy_18s_raw_counts %>% 
+  filter(Order==taxa_sel) %>%
+  group_by(Sample_ID,size_fraction) %>%
+  summarise(n_reads_raw=sum(n_reads), biomass_mg_m2=mean(biomass_mg_m2)) %>%  
+  left_join(pcr_join_prop, by="Sample_ID") %>%
+  select(-size_fraction.x) %>%
+  rename(size_fraction=size_fraction.y)->pcr_and_raw_18s_counts
 
+#Add PCR-bias corrected counts
+counts_raw_all=phy_18s_raw_counts %>% 
+  group_by(Sample_ID,size_fraction) %>%
+  summarise(n_reads_raw_sum=sum(n_reads), biomass_mg_m2=mean(biomass_mg_m2)) %>% 
+  select(Sample_ID,size_fraction,n_reads_raw_sum)
+
+
+pcr_and_raw_18s_counts=pcr_and_raw_18s_counts %>% 
+  left_join(.,counts_raw_all,by=c("Sample_ID","size_fraction")) %>% 
+  mutate(n_reads_pcr_counts=n_reads_pcr*n_reads_raw_sum)
 
 
 
@@ -245,39 +321,34 @@ taxa_sel="Calanoida"
   
   
 #Zooscan biomass proportion
-zooscan_taxa=read.csv(here("data/Zooscan/zooscan_by_sample_biomass.csv"))%>%
+zooscan_taxa=read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass.csv"))%>%
   filter(object_annotation_category==taxa_sel)  %>%
   select(-X) %>% 
-  mutate(Sample_ID=sample_id) %>%
-  mutate(size_fraction = case_when(
-    size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
-    TRUE ~ NA_real_)) %>%
-  group_by(Sample_ID) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction")) 
+  mutate(Sample_ID=sample_id) 
+  # mutate(size_fraction = case_when(
+  #   size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
+  # #   TRUE ~ NA_real_)) %>%
+  # group_by(Sample_ID) %>% 
+  # left_join(.,env_metadata, by=c("PC1","size_fraction")) 
 
 # Zooscan biomass proportion in CLR
-zooscan_taxa_clr= read.csv(here("data/Zooscan/zooscan_by_sample_biomass.csv"))%>% 
+zooscan_taxa_clr= read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass.csv"))%>% 
   group_by(sample_id,size_fraction) %>% 
   ungroup() %>% 
   filter(object_annotation_category=="Calanoida")  %>%
   select(-X) %>% 
   mutate(Sample_ID=sample_id) %>%
-  mutate(size_fraction = case_when(
-    size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
-    TRUE ~ NA_real_)) %>%
+  # mutate(size_fraction = case_when(
+  #   size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
+  #   TRUE ~ NA_real_)) %>%
   group_by(Sample_ID) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction"))  
+  left_join(.,metadata, by=c("PC1","size_fraction"))  
 
 # Zooscan relative abundances
-zooscan_relative=read.csv(here("data/Zooscan/zoop_relative_abundance.csv"))%>%
+zooscan_relative=read.csv(here("PCR_bias_correction/data/Zooscan/zoop_relative_abundance.csv"))%>%
   filter(object_annotation_category=="Calanoida")  %>%
   select(-X) %>% 
-  mutate(Sample_ID=sample_id) %>%
-  mutate(size_fraction = case_when(
-    size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
-    TRUE ~ NA_real_)) %>%
-  group_by(Sample_ID) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction")) 
+  mutate(Sample_ID=sample_id) 
 
 
 #Zooscan relative abundance CLR
@@ -286,7 +357,7 @@ zooscan_relative_clr=zooscan_relative %>%
   mutate(abundance_clr=clr_convert(count))%>%
   ungroup() %>% 
   group_by(sample_id) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction"))
+  left_join(.,metadata, by=c("PC1","size_fraction"))
 
 
 #========== COMPARE: Make combined dataframe for comparing all 3 methods
@@ -294,8 +365,17 @@ zooscan_relative_clr=zooscan_relative %>%
 #Propotions
 pcr_raw_zoo_18s=zooscan_taxa %>%
   #remove XL size class
-  filter(size_fraction != 5) %>%
-  left_join(pcr_and_raw_18s, by=c("PC1","size_fraction"))
+  filter(size_fraction != ">5") %>%
+  left_join(pcr_and_raw_18s, by=c("PC1","size_fraction")) %>% 
+  unique(.)
+
+#Counts
+pcr_raw_zoo_18s_counts=zooscan_taxa %>%
+  #remove XL size class
+  filter(size_fraction != ">5") %>%
+  left_join(pcr_and_raw_18s_counts, by=c("PC1","size_fraction")) %>% 
+  unique(.)
+
 
 pcr_raw_zoo_18s_clr=zooscan_taxa_clr %>%
   #remove XL size class
@@ -304,8 +384,9 @@ pcr_raw_zoo_18s_clr=zooscan_taxa_clr %>%
 
 pcr_raw_zoo_18s_relab=zooscan_relative %>%
   #remove XL size class
-  filter(size_fraction != 5) %>%
-  left_join(pcr_and_raw_18s, by=c("PC1","size_fraction"))
+  filter(size_fraction != ">5") %>%
+  left_join(pcr_and_raw_18s, by=c("PC1","size_fraction")) %>% 
+  unique(.)
 
 pcr_raw_zoo_18s_relab_clr=zooscan_relative_clr %>%
   #remove XL size class
@@ -341,7 +422,7 @@ pcr_raw_zoo_18s_long <- pivot_longer(pcr_raw_zoo_18s,
 #Plot grouped bar plot for RRA, PCR-RA, Zoo-PB proporitions
 labels_for_map=pcr_raw_zoo_18s %>% 
   ungroup()%>%
-  select(Sample_ID_short.x,PC1) %>%
+  select(Sample_ID_short,PC1) %>%
   unique(.) %>%
   arrange((PC1))
 
@@ -376,7 +457,7 @@ if (saving==1) {
       labs(title = "Methods Differences Biomass Proportion 18S",y = "Proportion Reads or Biomass")
     
     ggsave(
-      filename = here("plots/methods_comparison/grouped_bar_relative_abundance_diff_18s_biomass.pdf"),
+      filename = here("PCR_bias_correction/figures/grouped_bar_relative_abundance_diff_18s_biomass.pdf"),
       # filename = here("plots/methods_comparison/line_relative_abundance_diff.pdf"),
       plot = grouped_bar_all_18s,
       width = 8,  # Width in inches
@@ -384,7 +465,7 @@ if (saving==1) {
     )
     
     ggsave(
-      filename = here("plots/methods_comparison/grouped_bar_relative_abundance_diff_18s_biomass.png"),
+      filename = here("PCR_bias_correction/figures/grouped_bar_relative_abundance_diff_18s_biomass.png"),
       # filename = here("plots/methods_comparison/line_relative_abundance_diff.png"),
       plot = grouped_bar_all_18s,
       width = 8,  # Width in inches
@@ -393,6 +474,78 @@ if (saving==1) {
   }
   
   
+#2. Relative abundance by counts
+#Format Long and add difference metrics
+pcr_raw_zoo_18s_long <- pivot_longer(pcr_raw_zoo_18s_relab, 
+                                     cols = c(relative_abundance, n_reads_raw, n_reads_pcr), 
+                                     names_to = "Method", 
+                                     values_to = "relative_abundance") %>%
+  filter(!is.na(Sample_ID.y)) %>%
+  group_by(Sample_ID.x, size_fraction) %>%
+  mutate(diff_pcr = abs(relative_abundance[Method == "n_reads_pcr"] - relative_abundance),
+         diff_raw = abs(relative_abundance[Method == "n_reads_raw"] - relative_abundance))%>%
+  mutate(is_closer = ifelse(Method == "relative_abundance" & diff_pcr < diff_raw, "*", 
+                            ifelse(Method == "relative_abundance" & diff_pcr > diff_raw, "x", NA))) %>%
+  mutate(closest = ifelse(Method == "relative_abundance" & diff_pcr < 0.05*relative_abundance, "**",NA)) %>%
+  mutate(worse = ifelse(Method == "relative_abundance" & diff_raw < 0.05*relative_abundance, "xx",NA))
+
+
+
+
+
+#Plot grouped bar plot for RRA, PCR-RA, Zoo-PB proporitions
+labels_for_map=pcr_raw_zoo_18s_relab %>% 
+  ungroup()%>%
+  select(Sample_ID_short,PC1) %>%
+  unique(.) %>%
+  arrange((PC1))
+
+pcr_raw_zoo_18s_long %>%
+  ggplot(., aes(x = as.factor(PC1), y = relative_abundance, fill = Method)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~size_fraction, nrow=3, scale="free_y", labeller = label_bquote(rows = .(c("0.2-0.5 mm", "0.5-1 mm", "1-2 mm")))) +
+  theme_minimal() +
+  labs(title = "Methods Differences 18S",
+       x = expression(paste("Offshore ", PC1, " Onshore")),
+       y = "Proportion Reads or Abundance",
+       fill = "Method") +
+  coord_cartesian(ylim=c(0,1.1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        strip.text = element_text(size = 14)) +
+  geom_text(aes(label = is_closer), position = position_dodge(width = 0.9), vjust = -1, size = 5) +
+  scale_fill_manual(values = c("#4F86F7", "#F78D4F","#70BF41"),
+                    labels = c("PCR-corrected", "Raw Reads","Zooscan Abundances")) +
+  # geom_errorbar(aes(ymin = p.2.5, ymax = p.97.5), position = position_dodge(width = 0.9), width = 0.25) +
+  scale_shape_manual(values = c(16, 17, 18)) +  # Define shapes for each Method
+  scale_linetype_manual(values = c("solid", "dashed", "dotted")) + 
+  scale_x_discrete(labels = labels_for_map$Sample_ID_short.x)+# Define linetypes for each Method
+  scale_color_manual(values = c("#4F86F7", "#F78D4F","#70BF41")) -> grouped_bar_all_18s  # Define colors for each Method
+
+grouped_bar_all_18s
+
+saving=1
+if (saving==1) {
+  grouped_bar_all_18s=grouped_bar_all_18s+
+    labs(title = "Methods Differences Biomass Proportion 18S",y = "Proportion Reads or Abundance")
+  
+  ggsave(
+    filename = here("PCR_bias_correction/figures/grouped_bar_relative_abundance_diff_18s_counts.pdf"),
+    # filename = here("plots/methods_comparison/line_relative_abundance_diff.pdf"),
+    plot = grouped_bar_all_18s,
+    width = 8,  # Width in inches
+    height = 6  # Height in inches
+  )
+  
+  ggsave(
+    filename = here("PCR_bias_correction/figures/grouped_bar_relative_abundance_diff_18s_counts.png"),
+    # filename = here("plots/methods_comparison/line_relative_abundance_diff.png"),
+    plot = grouped_bar_all_18s,
+    width = 8,  # Width in inches
+    height = 6  # Height in inches
+  )
+}
 
 
 
@@ -609,7 +762,7 @@ pcr_raw_zoo_18s_clr %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 pcr_raw_zoo_18s_clr=pcr_raw_zoo_18s_clr %>%
   left_join(.,clusters,by="PC1")
@@ -760,7 +913,7 @@ pcr_raw_zoo_18s_relab_clr %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 
 
@@ -952,7 +1105,7 @@ pcr_raw_zoo_18s %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 
 
@@ -1079,11 +1232,11 @@ ggsave(
 
 
 #Predicted proportions
-fido_s1=read.csv(here("data/predicted_og/predicted_og_coi_05_29_2024_s1_phy_all_and_subpools.csv")) %>%
+fido_s1=read.csv(here("PCR_bias_correction/data/predicted_og/predicted_og_coi_05_29_2024_s1_phy_all_and_subpools.csv")) %>%
   select(-X)
-fido_s2=read.csv(here("data/predicted_og/predicted_og_coi_05_29_2024_s2_phy_all_and_subpools.csv")) %>%
+fido_s2=read.csv(here("PCR_bias_correction/data/predicted_og/predicted_og_coi_05_29_2024_s2_phy_all_and_subpools.csv")) %>%
   select(-X)
-fido_s3=read.csv(here("data/predicted_og/predicted_og_coi_05_29_2024_s3_phy_all_and_subpools.csv")) %>%
+fido_s3=read.csv(here("PCR_bias_correction/data/predicted_og/predicted_og_coi_05_29_2024_s3_phy_all_and_subpools.csv")) %>%
   select(-X)
 #Merge
 final_data_all_sizes=rbind(fido_s1,fido_s2,fido_s3) %>%
@@ -1113,7 +1266,7 @@ phy_taxa_pcr= final_data_all_sizes %>%
 ## === RAW READS: Repeat Analysis with raw/normalized reads === ##
 
 #Predicted proportions
-fido_s1_raw=read.csv(here("data/fido/phy/fido_coi_s1_ecdf_genus_phy_all_subpools.csv")) %>% 
+fido_s1_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s1_ecdf_genus_phy_all_subpools.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -1123,7 +1276,7 @@ fido_s1_raw=read.csv(here("data/fido/phy/fido_coi_s1_ecdf_genus_phy_all_subpools
   pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
 
 
-fido_s2_raw=read.csv(here("data/fido/phy/fido_coi_s2_ecdf_genus_phy_all_subpools.csv")) %>% 
+fido_s2_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s2_ecdf_genus_phy_all_subpools.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -1133,7 +1286,7 @@ fido_s2_raw=read.csv(here("data/fido/phy/fido_coi_s2_ecdf_genus_phy_all_subpools
   pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
 
 
-fido_s3_raw=read.csv(here("data/fido/phy/fido_coi_s3_ecdf_genus_phy_all_subpools.csv")) %>% 
+fido_s3_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s3_ecdf_genus_phy_all_subpools.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -1149,13 +1302,21 @@ merge(fido_s1_raw, fido_s2_raw, by = "Genus", all = TRUE) %>%
   mutate(across(.cols = everything(), .fns = ~ coalesce(., 0)))-> fido_coi_merged_raw
 
 #Taxa
-coi_taxa=read.csv(here("data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv")) %>%
+coi_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv")) %>%
   mutate(Genus = ifelse(Genus == "Genus", paste("unidentified",Family), Genus)) %>%
   filter(Genus %in% rownames(fido_coi_merged_raw)) %>% 
   column_to_rownames("Genus") %>% 
   select(-X) 
 
-env_metadata_phy=metadata %>% left_join(.,volume_filtered, by="Sample_ID_short") %>%
+#Metadata
+metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env_metadata_impute_phyloseq_6.2.2023_for_map.csv"))%>%
+  select(-X, -Sizefractionmm,max_size) %>%
+  mutate(Sample_ID=Sample_ID_dot) %>%
+  distinct(.) %>%
+  #Make PC1 values opposite for plotting
+  mutate(PC1=PC1*-1)
+
+env_metadata_phy=metadata %>% 
   left_join(.,dryweights, by = c("Sample_ID_short","max_size"))%>% 
   left_join(.,depths, by="Sample_ID_short") %>%
   mutate(biomass_dry = replace(biomass_dry, which(biomass_dry<0), NA)) %>%
@@ -1243,49 +1404,25 @@ zoo_metric="biomass_prop"
 taxa_sel="Calanoida"
 
 
-zooscan_taxa=read.csv(here("data/Zooscan/zooscan_by_sample_biomass.csv"))%>%
-  filter(object_annotation_category=="Calanoida")  %>%
-  # mutate(biomass_prop_taxa=(dryweight_C_mg_m2_taxa)) %>%
+#Zooscan biomass proportion
+zooscan_taxa=read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass.csv"))%>%
+  filter(object_annotation_category==taxa_sel)  %>%
   select(-X) %>% 
-  mutate(Sample_ID=sample_id) %>%
-  mutate(size_fraction = case_when(
-    size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
-    TRUE ~ NA_real_)) %>%
-  group_by(Sample_ID) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction")) 
+  mutate(Sample_ID=sample_id) 
+# mutate(size_fraction = case_when(
+#   size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
+# #   TRUE ~ NA_real_)) %>%
+# group_by(Sample_ID) %>% 
+# left_join(.,env_metadata, by=c("PC1","size_fraction")) 
 
 
-zooscan_taxa_clr= read.csv(here("data/Zooscan/zooscan_by_sample_biomass.csv"))%>% 
-  group_by(sample_id,size_fraction) %>% 
-  ungroup() %>% 
-  filter(object_annotation_category=="Calanoida")  %>%
-  select(-X) %>% 
-  mutate(Sample_ID=sample_id) %>%
-  mutate(size_fraction = case_when(
-    size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
-    TRUE ~ NA_real_)) %>%
-  group_by(Sample_ID) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction"))  
-
-
-zooscan_relative=read.csv(here("data/Zooscan/zoop_relative_abundance.csv"))%>%
+# Zooscan relative abundances
+zooscan_relative=read.csv(here("PCR_bias_correction/data/Zooscan/zoop_relative_abundance.csv"))%>%
   filter(object_annotation_category=="Calanoida")  %>%
   select(-X) %>% 
-  mutate(Sample_ID=sample_id) %>%
-  mutate(size_fraction = case_when(
-    size_fraction %in% names(size_mapping) ~ size_mapping[size_fraction],
-    TRUE ~ NA_real_)) %>%
-  group_by(Sample_ID) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction")) 
+  mutate(Sample_ID=sample_id) 
 
 
-#Zooscan relatie e abundance CLR
-zooscan_relative_clr=zooscan_relative %>% 
-  group_by(sample_id,size_fraction) %>% 
-  mutate(abundance_clr=clr_convert(count))%>%
-  ungroup() %>% 
-  group_by(sample_id) %>% 
-  left_join(.,env_metadata, by=c("PC1","size_fraction"))
 
 
 #========== COMPARE: Make combined dataframe for comparing all 3 methods
@@ -1296,22 +1433,10 @@ pcr_raw_zoo_coi=zooscan_taxa %>%
   filter(size_fraction != 5) %>%
   left_join(pcr_and_raw_coi, by=c("PC1","size_fraction"))
 
-pcr_raw_zoo_coi_clr=zooscan_taxa_clr %>%
-  #remove XL size class
-  filter(size_fraction != 5) %>%
-  left_join(pcr_and_raw_coi_clr, by=c("PC1","size_fraction"))
-
 pcr_raw_zoo_coi_relab=zooscan_relative %>%
   #remove XL size class
   filter(size_fraction != 5) %>%
   left_join(pcr_and_raw_coi, by=c("PC1","size_fraction"))
-
-pcr_raw_zoo_coi_relab_clr=zooscan_relative_clr %>%
-  #remove XL size class
-  filter(size_fraction != 5) %>%
-  left_join(pcr_and_raw_coi_clr, by=c("PC1","size_fraction"))
-
-
 
 
 
@@ -1340,7 +1465,7 @@ pcr_raw_zoo_coi_long <- pivot_longer(pcr_raw_zoo_coi,
 #Plot grouped bar plot for RRA, PCR-RA, Zoo-PB proporitions
 labels_for_map=pcr_raw_zoo_coi %>% 
   ungroup()%>%
-  select(Sample_ID_short.x,PC1) %>%
+  select(Sample_ID_short,PC1) %>%
   unique(.) %>%
   arrange((PC1))
 
@@ -1867,7 +1992,7 @@ pcr_raw_zoo_coi_clr %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 
 
@@ -2060,7 +2185,7 @@ pcr_raw_zoo_coi %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 
 
@@ -2254,7 +2379,7 @@ pcr_raw_zoo_18s_clr %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 
 
@@ -2447,7 +2572,7 @@ pcr_raw_zoo_18s %>%
 
 
 #Add clusters to df for plotting groups
-clusters=read.csv(here("data/physical_environmental_data/pca_clusters.csv")) %>%
+clusters=read.csv(here("PCR_bias_correction/data/physical_environmental_data/pca_clusters.csv")) %>%
   select(-Sample_ID_dot) %>% unique()
 
 

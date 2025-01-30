@@ -11,16 +11,16 @@ here()
 ###18S
 #Read in the OTU data
 #Run 1 (Non pooled data)
-asv18s_run1=read.csv(here("data/past/","ASV_table_18s_run1.csv")) %>%
+asv18s_run1=read.csv(here("PCR_bias_correction/data/raw_reads/","ASV_table_18s_run1.csv")) %>%
   select(-X) 
 #Run2
-asv18s_run2=read.csv(here("data/past/","ASV_table_18s_run2.csv")) %>%
+asv18s_run2=read.csv(here("PCR_bias_correction/data/raw_reads/","ASV_table_18s_run2.csv")) %>%
   select(-X)
 
 
 
 #Taxa Tables using new combined taxa file between BLAST and Metazoogene
-taxa_18s=read.csv(here("data/taxa_files/blast_metazoo_18s.csv")) %>% 
+taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.csv")) %>% 
   select(-X) %>% 
   mutate(non_na_count = rowSums(!is.na(select(., -Hash)))) %>%
   group_by(Hash) %>%
@@ -123,7 +123,7 @@ tax18s_s3=  tax_table(as.matrix(tax18s_s3))
 
 
 #Metadata
-meta18s=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv")) %>%
+meta18s=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv")) %>%
   dplyr::select(-c("X")) %>%
   column_to_rownames("Sample_ID_dot") %>%
   select(-c(Sizefractionmm,offshore_onshore,clust_group,PC1,cycle, max_size)) %>%
@@ -285,7 +285,7 @@ tax18s_family=rbind(fido_18s_s1_family_taxa,fido_18s_s2_family_taxa,fido_18s_s3_
   #Additionally filter out reclassified Corycaeidae (actually a poecilistomatoida)
   filter(!(Family == "Corycaeidae" & Order =="Cyclopoida")) 
   
-write.csv(tax18s_family,here("data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))
+write.csv(tax18s_family,here("PCR_bias_correction/data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))
 
 
 
@@ -367,8 +367,8 @@ other <- fido_18s_s1_family_otu %>%
   
   
   #Save plot 
-  ggsave(here("plots/pre_processing/QC/other_order_composition_s1.png"), width = 10, height = 6, units = "in")
-  ggsave(here("plots/pre_processing/QC/other_order_composition_s1.pdf"), width = 18, height = 6, units = "in")
+  # ggsave(here("plots/pre_processing/QC/other_order_composition_s1.png"), width = 10, height = 6, units = "in")
+  # ggsave(here("plots/pre_processing/QC/other_order_composition_s1.pdf"), width = 18, height = 6, units = "in")
   
   
   #Remove the other from the fido_18s_s1_family_otu
@@ -376,15 +376,15 @@ other <- fido_18s_s1_family_otu %>%
     summarise_all(sum) %>% 
     mutate(Hash = "other")->other
   
-  #Find columns where other exceeds 5% of the sample total
+  #Find columns where other exceeds threshold of the sample total
   # Step 1: Calculate column sums for both DataFrames
   sums_other <- colSums(other %>% select(-Hash))
   sums_fido <- colSums(fido_18s_s1_family_otu)
   
-  # Step 2: Calculate 5% of the column sums of fido_18s_s3_family_otu
+  # Step 2: Calculate threshold of the column sums of fido_18s_s3_family_otu
   thresholds <- sums_fido * 0.2
   
-  # Step 3: Identify columns where the sum of `other` is greater than 5% of the sum of `fido_18s_s1_family_otu`
+  # Step 3: Identify columns where the sum of `other` is greater than threshold of the sum of `fido_18s_s1_family_otu`
   columns_to_remove <- names(which(sums_other > thresholds))
   
   # Step 4: Remove these columns from the fido_18s_s3_family_otu DataFrame
@@ -413,9 +413,26 @@ other <- fido_18s_s1_family_otu %>%
   
   
   #Save
-  write.csv(fido_18s_s1_save_family_phy,here("data/fido/phy/fido_18s_s1_ecdf_family_phy_all_subpools.csv"))
+  write.csv(fido_18s_s1_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"))
 
 rm(other)
+
+
+#Visualize the proportion of each taxa across samples
+fido_18s_s1_save_family_phy%>% 
+  pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
+  group_by(Family, Category) %>% 
+  summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
+  ungroup() %>%  group_by(Category) %>% 
+  mutate(sample_sum=sum(taxa_sum),prop=taxa_sum/sample_sum) %>% 
+  ggplot(., aes(x = Category, y = taxa_sum, fill = Family)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Stacked Bar Plot by Order",
+       x = "Family",
+       y = "Sum of Values",
+       fill = "Category")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 ## ==== s2 ====
@@ -461,15 +478,15 @@ other %>%
   summarise_all(sum) %>% 
   mutate(Hash = "other")->other
 
-#Find columns where other exceeds 5% of the sample total
+#Find columns where other exceeds threshold of the sample total
 # Step 1: Calculate column sums for both DataFrames
 sums_other <- colSums(other %>% select(-Hash))
 sums_fido <- colSums(fido_18s_s2_family_otu)
 
-# Step 2: Calculate 5% of the column sums of fido_18s_s3_family_otu
+# Step 2: Calculate threshold of the column sums of fido_18s_s3_family_otu
 thresholds <- sums_fido * 0.2
 
-# Step 3: Identify columns where the sum of `other` is greater than 5% of the sum of `fido_18s_s2_family_otu`
+# Step 3: Identify columns where the sum of `other` is greater than threshold of the sum of `fido_18s_s2_family_otu`
 columns_to_remove <- names(which(sums_other > thresholds))
 
 # Step 4: Remove these columns from the fido_18s_s3_family_otu DataFrame
@@ -494,8 +511,22 @@ fido_18s_s2_final %>%
   summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s2_save_family_phy
 
 #Save
-write.csv(fido_18s_s2_save_family_phy,here("data/fido/phy/fido_18s_s2_ecdf_family_phy_all_subpools.csv"))
+write.csv(fido_18s_s2_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"))
 
+fido_18s_s2_save_family_phy%>% 
+  pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
+  group_by(Family, Category) %>% 
+  summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
+  ungroup() %>%  group_by(Category) %>% 
+  mutate(sample_sum=sum(taxa_sum),prop=taxa_sum/sample_sum) %>% 
+  ggplot(., aes(x = Category, y = taxa_sum, fill = Family)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Stacked Bar Plot by Order",
+       x = "Family",
+       y = "Sum of Values",
+       fill = "Category")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 
@@ -543,18 +574,18 @@ other %>%
 
 
 #Save plot 
-ggsave(here("plots/pre_processing/QC/other_order_composition_s3.png"), width = 10, height = 6, units = "in")
-ggsave(here("plots/pre_processing/QC/other_order_composition_s3.pdf"), width = 18, height = 6, units = "in")
+# ggsave(here("plots/pre_processing/QC/other_order_composition_s3.png"), width = 10, height = 6, units = "in")
+# ggsave(here("plots/pre_processing/QC/other_order_composition_s3.pdf"), width = 18, height = 6, units = "in")
 
-#Find columns where other exceeds 5% of the sample total
+#Find columns where other exceeds threshold of the sample total
 # Step 1: Calculate column sums for both DataFrames
 sums_other <- colSums(other)
 sums_fido <- colSums(fido_18s_s3_family_otu)
 
-# Step 2: Calculate 5% of the column sums of fido_18s_s3_family_otu
+# Step 2: Calculate threshold of the column sums of fido_18s_s3_family_otu
 thresholds <- sums_fido * 0.20
 
-# Step 3: Identify columns where the sum of `other` is greater than 5% of the sum of `fido_18s_s3_family_otu`
+# Step 3: Identify columns where the sum of `other` is greater than threshold of the sum of `fido_18s_s3_family_otu`
 columns_to_remove <- names(which(sums_other > thresholds))
 
 # Step 4: Remove these columns from the fido_18s_s3_family_otu DataFrame
@@ -603,5 +634,19 @@ fido_18s_s3_final %>%
   summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s3_save_family_phy
 
 #Save
-write.csv(fido_18s_s3_save_family_phy,here("data/fido/phy/fido_18s_s3_ecdf_family_phy_all_subpools.csv"))
+write.csv(fido_18s_s3_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"))
 
+fido_18s_s3_save_family_phy%>% 
+  pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
+  group_by(Family, Category) %>% 
+  summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
+  ungroup() %>%  group_by(Category) %>% 
+  mutate(sample_sum=sum(taxa_sum),prop=taxa_sum/sample_sum) %>% 
+  ggplot(., aes(x = Category, y = taxa_sum, fill = Family)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Stacked Bar Plot by Order",
+       x = "Family",
+       y = "Sum of Values",
+       fill = "Category")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
