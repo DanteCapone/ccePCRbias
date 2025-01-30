@@ -418,23 +418,6 @@ other <- fido_18s_s1_family_otu %>%
 rm(other)
 
 
-#Visualize the proportion of each taxa across samples
-fido_18s_s1_save_family_phy%>% 
-  pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
-  group_by(Family, Category) %>% 
-  summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
-  ungroup() %>%  group_by(Category) %>% 
-  mutate(sample_sum=sum(taxa_sum),prop=taxa_sum/sample_sum) %>% 
-  ggplot(., aes(x = Category, y = taxa_sum, fill = Family)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(title = "Stacked Bar Plot by Order",
-       x = "Family",
-       y = "Sum of Values",
-       fill = "Category")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
 ## ==== s2 ====
 # Filter out any non-existent columns from your dataframe
 all_cols <- all_cols[all_cols %in% names(fido_18s_s2_family_otu)]
@@ -650,3 +633,111 @@ fido_18s_s3_save_family_phy%>%
        y = "Sum of Values",
        fill = "Category")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+# --Visualize the proportion of each taxa across samples
+library(patchwork)  # For arranging plots
+
+# Define custom colors for taxa
+taxa_colors <- c(
+  "other" = "grey",
+  "Calanidae" = "#77DD77",       # Pastel green
+  "Clausocalanidae" = "#72872d", # Bright pastel green
+  "Eucalanidae" = "#89CFF0",     # Baby blue
+  "Metridinidae" = "#9370DB",    # Pastel purple
+  "Rhincalanidae" = "#4682B4",   # Steel blue
+  "Paracalanidae" = "#B0E57C",   # Lime pastel green
+  "Oithonidae" = "#f0ca62",      # Light blue
+  "Euphausiidae" = "#FF6961",    # Pastel red
+  "Salpidae" = "#FFB6C1",        # Pastel pink
+  "unidentified Calanoida" = "#2d8087"   # Neutral for unidentified taxa
+)
+
+# Function to process each dataset
+process_data <- function(df, dataset_name) {
+  df %>%
+    pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>%
+    group_by(Family, Category) %>%
+    summarize(taxa_sum = sum(Value), .groups = 'drop') %>%
+    ungroup() %>%
+    group_by(Category) %>%
+    mutate(sample_sum = sum(taxa_sum), prop = taxa_sum / sample_sum) %>%
+    mutate(Dataset = dataset_name)
+}
+
+# Process datasets separately
+plot_data_s1 <- process_data(fido_18s_s1_save_family_phy, "S1")
+plot_data_s2 <- process_data(fido_18s_s2_save_family_phy, "S2")
+plot_data_s3 <- process_data(fido_18s_s3_save_family_phy, "S3")
+
+# Function to create a proportional stacked bar plot for each dataset
+create_plot <- function(data, dataset_name) {
+  ggplot(data, aes(x = Category, y = prop, fill = Family)) +
+    geom_bar(stat = "identity", position = "fill") +  
+    scale_fill_manual(values = taxa_colors) +  
+    theme_minimal() +
+    labs(
+      title = paste("Proportional Stacked Bar Plot by Family (", dataset_name, ")", sep = ""),
+      x = "Sample",
+      y = "Proportion",
+      fill = "Taxa"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# Create separate plots
+p1 <- create_plot(plot_data_s1, "S1")
+p2 <- create_plot(plot_data_s2, "S2")
+p3 <- create_plot(plot_data_s3, "S3")
+
+# Arrange plots in a 3-row grid layout without shared x-axes
+final_plot1 <- p1 / p2 / p3  # Stitches them vertically with their own x-axes
+
+
+final_plot1
+# Save first plot
+save_path1 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/PCR_bias_correction/figures/miscellaneous/calibration_experiment_taxa_proportions_18s_all_samples")
+ggsave(filename = paste0(save_path1, ".pdf"), plot = final_plot1, width = 8, height = 12, dpi = 300)
+ggsave(filename = paste0(save_path1, ".png"), plot = final_plot1, width = 8, height = 12, dpi = 300)
+
+# ---- SECOND PLOT: Only Calibration Experiment Samples ----
+
+# Function to filter calibration samples
+process_filtered_data <- function(df, dataset_name) {
+  df %>%
+    select(c(contains("All"), contains("A1"), contains("B3"), contains("C5"), contains("Family"))) %>%
+    pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>%
+    group_by(Family, Category) %>%
+    summarize(taxa_sum = sum(Value), .groups = 'drop') %>%
+    ungroup() %>%
+    group_by(Category) %>%
+    mutate(sample_sum = sum(taxa_sum), prop = taxa_sum / sample_sum) %>%
+    mutate(Dataset = dataset_name)
+}
+
+# Process and combine filtered datasets
+plot_data_filtered <- bind_rows(
+  process_filtered_data(fido_18s_s1_save_family_phy, "S1"),
+  process_filtered_data(fido_18s_s2_save_family_phy, "S2"),
+  process_filtered_data(fido_18s_s3_save_family_phy, "S3")
+)
+
+# Create proportional stacked bar plot (Filtered Calibration Samples)
+p2 <- ggplot(plot_data_filtered, aes(x = Category, y = prop, fill = Family)) +
+  geom_bar(stat = "identity", position = "fill") +  
+  scale_fill_manual(values = taxa_colors) +  
+  theme_minimal() +
+  labs(
+    title = "Proportional Stacked Bar Plot by Family (Calibration Experiment)",
+    x = "Sample",
+    y = "Proportion",
+    fill = "Taxa"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+p2
+
+# Save second plot
+save_path2 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/PCR_bias_correction/figures/miscellaneous/calibration_experiment_taxa_proportions_18s")
+ggsave(filename = paste0(save_path2, ".pdf"), plot = p2, width = 8, height = 10, dpi = 300)
+ggsave(filename = paste0(save_path2, ".png"), plot = p2, width = 8, height = 10, dpi = 300)
