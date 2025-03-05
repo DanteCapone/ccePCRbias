@@ -28,6 +28,7 @@ fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_fam
   ungroup() %>%
   column_to_rownames("Family")
 
+
 #Metadata
 meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
@@ -49,7 +50,7 @@ Y_s1=fido_input_filt%>% as.matrix()
 
 #Fit pibble model 
 #Loop thru values for Gamma
-gamma <- c(1,2,3,5,8,10,15,20,50,100,200,300,400,500,700,1000)
+gamma <- c(.1, .25, .5, .75, 1,2,3,5,8,10,15,20,50,100,200,300,400,500,700,1000)
 logML <- rep(NA, length(gamma))
 for(i in 1:length(gamma)){
   fit <- pibble(Y_s1, X, Gamma = gamma[i]*diag(nrow(X)), n_samples=5000)
@@ -60,7 +61,7 @@ for(i in 1:length(gamma)){
 plot(gamma, logML, type = "l")
 points(gamma, logML)
 #400 seems good based on LML
-gamma=20
+gamma=10
 
 #Specify the remaining priors with default values
 upsilon <- nrow(Y_s1)+3 
@@ -76,7 +77,7 @@ priors <- to_clr(priors)
 ##end of added code
 
 ##MPN: Note, you had lower case "gamma" the parameter is upper case "Gamma". Fido was using the default here instead of what you supplied.
-fit <- pibble(Y_s1, X, Gamma = 20*diag(nrow(X)), n_samples = 10000)
+fit <- pibble(Y_s1, X, Gamma = gamma*diag(nrow(X)), n_samples = 10000)
 
 #Convert to centered log ratio coordinates
 fit_s1 <- to_clr(fit)
@@ -114,7 +115,7 @@ for(s in samples_to_loop$sample){
   
   
   #
-  predicted_s1 <- predict(fit_prop_1, newdata=X.tmp.s1, summary=TRUE) %>% 
+  predicted_s1 <- predict(fit_prop_1, newdata=X.tmp.s1, summary=TRUE, response = "Y") %>% 
     mutate(cycle_num = c(0)[sample])%>%
     mutate(size=rep("0.2-0.5mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
@@ -168,7 +169,18 @@ write.csv(final_data_s1,here(paste0("PCR_bias_correction/data/predicted_og/predi
 
 
 
+#MPN:Using this plot to get the predicted original concentration
+# Note that there are super wide intervals for the "other" category in some of the problem samples
+focus.covariate <- rownames(X)[which(grepl("sample_num", rownames(X)))]
 
+# Also just so the plot fits nicely in Rmarkdown we are also going to just 
+# plot a few of the taxa
+focus.coord <- paste0("prop_", c("Calanidae", "Metridinidae", "other")) 
+
+# Also to make the plot fit nicely, I just flip the orientation of the plot 
+plot(fit_prop_1, par="Lambda", focus.cov=focus.covariate, focus.coord=focus.coord) +
+  theme(strip.text.y=element_text(angle=0, hjust=1)) +
+  facet_grid(.data$covariate~.)
 
 
 
@@ -185,7 +197,7 @@ fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_fam
   column_to_rownames("Family")
 
 #Metadata
-meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveragedhttp://127.0.0.1:32521/graphics/ea6481fd-9974-40ba-a031-c3cfbd8fce32.png_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt))
 colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
@@ -261,7 +273,7 @@ for(s in samples_to_loop$sample){
   
   
   #
-  predicted_s2 <- predict(fit_prop_1, newdata=X.tmp.s2, summary=TRUE) %>% 
+  predicted_s2 <- predict(fit_prop_1, newdata=X.tmp.s2, summary=TRUE, response = "Y") %>% 
     mutate(cycle_num = c(0)[sample])%>%
     mutate(size=rep("0.5-1mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
@@ -313,6 +325,17 @@ beepr::beep(12)
 current_date <- format(Sys.Date(), "%m_%d_%Y")
 write.csv(final_data_s2,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools.csv")))
 
+
+focus.covariate <- rownames(X)[which(grepl("sample_num", rownames(X)))]
+
+# Also just so the plot fits nicely in Rmarkdown we are also going to just 
+# plot a few of the taxa
+focus.coord <- paste0("prop_", c("Calanidae", "Metridinidae", "other")) 
+
+# Also to make the plot fit nicely, I just flip the orientation of the plot 
+plot(fit_prop_1, par="Lambda", focus.cov=focus.covariate, focus.coord=focus.coord) +
+  theme(strip.text.y=element_text(angle=0, hjust=1)) +
+  facet_grid(.data$covariate~.)
 
 
 # S3 ----------------------------------------------------------------------
@@ -453,3 +476,13 @@ beepr::beep(12)
 current_date <- format(Sys.Date(), "%m_%d_%Y")
 write.csv(final_data_s3,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools.csv")))
 
+focus.covariate <- rownames(X)[which(grepl("sample_num", rownames(X)))]
+
+# Also just so the plot fits nicely in Rmarkdown we are also going to just 
+# plot a few of the taxa
+focus.coord <- paste0("prop_", c("Calanidae", "Metridinidae", "other")) 
+
+# Also to make the plot fit nicely, I just flip the orientation of the plot 
+plot(fit_prop_1, par="Lambda", focus.cov=focus.covariate, focus.coord=focus.coord) +
+  theme(strip.text.y=element_text(angle=0, hjust=1)) +
+  facet_grid(.data$covariate~.)
