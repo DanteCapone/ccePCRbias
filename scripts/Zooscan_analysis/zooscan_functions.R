@@ -52,20 +52,30 @@ readEcotaxa <- function(data) {
   
   print(unique(data_select$object_annotation_category))
   
-  # Extract size fraction as a categorical variable
+  # Extract size fraction
   data_final <- data_select %>%
+    # Assign size_fraction using only the second part of the logic
     mutate(
-      # Combine acq_min_mesh and acq_max_mesh as "min-max" in mm
-      size_fraction = paste0(acq_min_mesh / 1000, "-", acq_max_mesh / 1000)
+      size_fraction = case_when(
+        object_feret <= 0.5 ~ "0.2-0.5",   
+        object_feret >= 0.5 & object_feret < 1 ~ "0.5-1",   
+        object_feret <= 2 ~ "1-2",     
+        object_feret > 2 ~ ">2"
+      )
     ) %>%
-    # Modify size_fraction for esd_mm > 5 to ">5000"
+    # Create a numeric version of the size fraction
     mutate(
-      size_fraction = ifelse(esd_mm > 2, ">2", size_fraction)
+      size_fraction_numeric = case_when(
+        size_fraction == "0.2-0.5" ~ 0.2,
+        size_fraction == "0.5-1" ~ 0.5,
+        size_fraction == "1-2" ~ 1,
+        size_fraction == ">2" ~ 2,
+        TRUE ~ NA_real_  # Assign NA for any unmatched cases
+      )
     )
   
   return(data_final)
 }
-
 
 #Function to Convert Zooscan measurement to Carbon Biomass
 # USe equations from Laveniegos and Ohman which use length-carbon regressions
@@ -105,7 +115,7 @@ transform_by_taxa_group <- function(df, length_type) {
       object_annotation_category=="Hydrozoa" ~ hydrozoans(object_feret),
       object_annotation_category=="Polychaeta" ~ polychaetes(object_feret),
       object_annotation_category=="Ostracoda" ~ ostracods(object_feret),
-      object_annotation_category=="Eumalacostraca" ~ crustacea_other(object_feret),
+      object_annotation_category=="Eumalacostraca" ~ euphausiids(object_feret),
       object_annotation_category=="tetrazoid" ~ pyrosomes(object_feret),
       object_annotation_category=="Salpida" ~ salps(object_feret),
       object_annotation_category=="Hyperiidea" ~ hyperiids(object_feret),

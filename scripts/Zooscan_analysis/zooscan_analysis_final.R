@@ -1,5 +1,5 @@
 #Zooscan analysis final
-librarian::shelf(tidyverse, googledrive, stringr,here,vegan,ggpubr)
+librarian::shelf(tidyverse, googledrive, stringr,here,vegan,ggpubr, patchwork)
 here()
 source(here("PCR_bias_correction/scripts/Zooscan_analysis/zooscan_functions.R"))
 source("PCR_bias_correction/scripts/helpful_functions/general_helper_functions.R")
@@ -17,7 +17,7 @@ metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env
   mutate(
     size_fraction = case_when(
       size_fraction_numeric %in% c(0.2, 0.5) ~ "0.2-1", # Combine 0.2 and 0.5
-      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-5", # Assign 1-5
+      size_fraction_numeric >= 1 & size_fraction_numeric <= 5 ~ "1-2", # Assign 1-2
       TRUE ~ NA_character_ # Handle any unexpected values
     )
   ) %>%
@@ -47,8 +47,8 @@ zooscan_processed=readEcotaxa(zooscan_exp)%>%
          sample_id = ifelse(sample_id == "ct2_t9_h19", "c2_t9_h19", sample_id),
          sample_id = ifelse(sample_id == "c3_bt6_h25", "c3_t6_h25", sample_id)) %>%
   #Need to fix hyperiids
-  filter(!(object_annotation_category %in% c("Hyperiidea","part<Crustacea","darksphere", "multiple organisms","head<Chaetognatha",
-                                             "egg<Actinopterygii"))) %>%
+  filter(!(object_annotation_category %in% c("Hyperiidea","part<Crustacea","dark<sphere", "multiple organisms","head<Chaetognatha",
+                                             "egg<Actinopterygii","other<living","Insecta"))) %>%
   #Fix missing volume filtered 
   mutate(sample_tot_vol = case_when(
     sample_id == "ct1_t1_h28" ~ 279,
@@ -56,68 +56,217 @@ zooscan_processed=readEcotaxa(zooscan_exp)%>%
     TRUE ~ sample_tot_vol  # This line keeps the original values for all other rows
   ))
 
-#Calculate C-biomass
-zooscan_processed %>%
-  transform_by_taxa_group(.,"feret") %>%
-  mutate(dryweight_C_mg=dryweight_C_ug/1000)->zooscan_biomass 
 
-#Biomass histogram
-zooscan_biomass %>% 
-  filter(object_annotation_category %in% c("Calanoida","Copepoda<Maxillopoda","Oithonidae","Harpacticoida", "Poecilostomatoida"))%>%
-  # filter(object_annotation_category=="Calanoida") %>%
-  ggplot(., aes(x = log10((dryweight_C_ug)))) +   # Set the data and the variable to plot
-  geom_histogram(binwidth = 0.2, color = "black", fill = "lightblue", alpha = 0.6) +  # Create the histogram layer
-  labs(title = "Histogram of Random Normal Values", x = "Values", y = "Frequency")  # Add titles and labels
-
-
-#Compute relative abudances 
-relative_abundances=zooscan_processed %>%
-  group_by(sample_id,size_fraction,object_annotation_category) %>%
-  summarise(count = n()) %>%
-  mutate(total = sum(count),
-         relative_abundance = count / total)
-
-
-
-
-
-# Merge dataframes: add metadata to relative abudance data
-relative_abundances_map <- relative_abundances %>%
-  left_join(metadata, by=c("sample_id","size_fraction")) %>% 
-  distinct(.)
-
-biomass_map = zooscan_biomass %>%
-  left_join(.,metadata, by=c("sample_id","size_fraction")) %>% 
-  distinct(.) 
-
-#Save main biomass df
-write.csv(biomass_map,here("PCR_bias_correction/data/Zooscan/zooscan_biomass_all.csv"))
-
-
-#Filter to calalnoids, merge by sample and size and then compute biomass/m2 and log biomass/m2
-#General Zooscan dataframe for plotting
-zooscan_by_sample = biomass_map %>%
-  group_by(size_fraction, sample_id) %>%
-  mutate(dryweight_C_mg_sum_sample = sum(dryweight_C_mg, na.rm = TRUE),
-         dryweight_C_ug_sum_sample = sum(dryweight_C_ug, na.rm = TRUE)) %>%
-  group_by(size_fraction, sample_id,object_annotation_category) %>%
-  summarise(dryweight_C_mg_sum_taxa = sum(dryweight_C_mg, na.rm = TRUE),
+# Retain PC1 and Sample_ID_short, and calculate C-biomass, relative abundances, and biomass proportions
+zooscan_combined <- zooscan_processed %>%
+  # Calculate biomass
+  transform_by_taxa_group(., "feret") %>%
+  mutate(dryweight_C_mg = dryweight_C_ug / 1000) %>%
+  # Add metadata first to get sample_conc, PC1, and Sample_ID_short
+  left_join(metadata %>% select(sample_id, size_fraction, PC1, Sample_ID_short), 
+            by = c("sample_id", "size_fraction")) %>%
+  # Fill missing PC1 values within each Sample_ID_short
+  group_by(Sample_ID_short) %>%
+  fill(PC1, .direction = "downup") %>%
+  ungroup() %>%
+  # Compute relative abundances and biomass sums while preserving sample_conc
+  group_by(sample_id,size_fraction_numeric ,size_fraction, object_annotation_category, PC1, Sample_ID_short) %>%
+  summarise(count = n(),
+            dryweight_C_mg_sum_taxa = sum(dryweight_C_mg, na.rm = TRUE),
             dryweight_C_ug_sum_taxa = sum(dryweight_C_ug, na.rm = TRUE),
-            dryweight_C_mg_sum_sample=mean(dryweight_C_mg_sum_sample),
-            dryweight_C_ug_sum_sample=mean(dryweight_C_ug_sum_sample),
-            sample_conc=mean(sample_conc),
-            sample_tot_vol=mean(sample_tot_vol),
-            acq_sub_part=mean(acq_sub_part))%>%
-  left_join(metadata, by=c("sample_id","size_fraction")) %>%
-  mutate(log10_dryweight_C_ug_m2_taxa=log(dryweight_C_ug_sum_taxa),
-         dryweight_C_mg_m2_taxa=dryweight_C_mg_sum_taxa*sample_conc,
-         log10_dryweight_C_ug_m2_sample=log(dryweight_C_ug_sum_sample),
-         dryweight_C_mg_m2_sample=dryweight_C_mg_sum_sample*sample_conc) %>%
-  mutate(biomass_prop_taxa=dryweight_C_mg_m2_taxa/dryweight_C_mg_m2_sample,
-         biomass_taxa_clr=clr_convert(dryweight_C_mg_m2_taxa)) %>% 
-  distinct(biomass_taxa_clr, .keep_all = TRUE) 
+            sample_conc = mean(sample_conc, na.rm = TRUE), 
+            .groups = 'drop') %>%
+  group_by(sample_id, size_fraction, size_fraction_numeric) %>%
+  mutate(total = sum(count),
+         relative_abundance = count / total,
+         dryweight_C_mg_sum_sample = sum(dryweight_C_mg_sum_taxa, na.rm = TRUE),
+         dryweight_C_ug_sum_sample = sum(dryweight_C_ug_sum_taxa, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # Now calculate biomass/m2 and log biomass/m2
+  mutate(log10_dryweight_C_ug_m2_taxa = log(dryweight_C_ug_sum_taxa),
+         dryweight_C_mg_m2_taxa = dryweight_C_mg_sum_taxa * sample_conc,
+         log10_dryweight_C_ug_m2_sample = log(dryweight_C_ug_sum_sample),
+         dryweight_C_mg_m2_sample = dryweight_C_mg_sum_sample * sample_conc,
+         biomass_prop_taxa = dryweight_C_mg_m2_taxa / dryweight_C_mg_m2_sample,
+         biomass_taxa_clr = clr_convert(dryweight_C_mg_m2_taxa)) %>%
+  group_by(sample_id) %>%
+  mutate(total_check=sum(relative_abundance)/total) %>% 
+  fill(PC1, .direction = "downup") %>% 
+  fill(Sample_ID_short, .direction="downup") 
+
+#Save
+write.csv(zooscan_combined,here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass.csv"))
+
+# PC1 Labels
+labels_for_PC1 <- metadata %>% 
+  ungroup() %>%
+  select(Sample_ID_short, PC1) %>%
+  unique() %>%
+  arrange(PC1)
+
+# Identify top 10 most abundant categories for relative abundance plot
+top_categories_abundance <- zooscan_combined %>%
+  group_by(object_annotation_category) %>%
+  summarise(total_abundance = sum(relative_abundance, na.rm = TRUE)) %>%
+  arrange(desc(total_abundance)) %>%
+  slice_head(n = 10) %>%
+  pull(object_annotation_category)
+
+# Identify top 10 most abundant categories for biomass proportion plot
+top_categories_biomass <- zooscan_combined %>%
+  group_by(object_annotation_category) %>%
+  summarise(total_biomass = sum(biomass_prop_taxa, na.rm = TRUE)) %>%
+  arrange(desc(total_biomass)) %>%
+  slice_head(n = 10) %>%
+  pull(object_annotation_category)
+
+# Get unique taxa across all size fractions and plots
+unique_taxa <- unique(c(top_categories_abundance, top_categories_biomass))
+
+# Create an "Other" category for anything not in the top 10
+zooscan_combined <- zooscan_combined %>%
+  mutate(object_annotation_category = ifelse(object_annotation_category %in% unique_taxa,
+                                             object_annotation_category,
+                                             "Other"))
+
+# Set "Other" as the last level for consistent ordering
+zooscan_combined$object_annotation_category <- factor(
+  zooscan_combined$object_annotation_category, 
+  levels = c(unique_taxa, "Other")
+)
+
+# Filter for abundance and biomass data with the new "Other" category included
+abundance_data <- zooscan_combined %>%
+  group_by(sample_id, size_fraction, object_annotation_category, PC1) %>%
+  summarise(relative_abundance = sum(relative_abundance), .groups = 'drop')
+
+biomass_data <- zooscan_combined %>%
+  group_by(sample_id, size_fraction, object_annotation_category, PC1) %>%
+  summarise(biomass_prop_taxa = sum(biomass_prop_taxa), .groups = 'drop')
+
+# Generate consistent color palette with grey for "Other"
+exclude_colors <- c("#FFFF99", "#B3B3B3")  # Exclude yellow and grey from main palette
+num_taxa <- length(unique_taxa)
+color_palette <- brewer.pal(n = min(num_taxa + 1, 12), name = "Set3")
+color_palette <- setdiff(color_palette, exclude_colors)
+if (num_taxa > length(color_palette)) {
+  color_palette <- colorRampPalette(color_palette)(num_taxa)
+}
+# Add grey for "Other"
+color_palette <- c(color_palette, "Other" = "#B3B3B3")
+taxa_colors <- setNames(color_palette, levels(zooscan_combined$object_annotation_category))
+
+# Order size fractions explicitly
+ordered_size_fractions <- c("0.2-0.5", "0.5-1", "1-2",">2")
+
+# Function to create abundance and biomass plots for each size_fraction
+create_plot <- function(data, y, ylabel, title_prefix) {
+  lapply(seq_along(ordered_size_fractions), function(i) {
+    size <- ordered_size_fractions[i]
+    
+    p <- ggplot(data %>% filter(size_fraction == size), 
+                aes(x = as.factor(PC1), y = .data[[y]], fill = object_annotation_category)) +
+      geom_bar(stat = "identity", position = "stack") +
+      scale_fill_manual(values = taxa_colors, name="Taxa") + 
+      scale_x_discrete(labels = labels_for_PC1$Sample_ID_short) +
+      labs(
+        title = paste(title_prefix, size),
+        x = expression(paste("Offshore ", PC1, " Onshore")),
+        y = ylabel
+      ) +
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Increased for better readability (O)
+        axis.title.x = element_text(size = 16),  # Larger axis title (O)
+        axis.title.y = element_text(size = 16),  # Larger y-axis title (O)
+        plot.title = element_text(size = 18, face = "bold"),  # Increased title size (O)
+        legend.text = element_text(size = 14),  # Larger legend text (L)
+        legend.title = element_text(size = 16, face = "bold"),  # Larger, bold legend title (L)
+        legend.position = ifelse(i %in% c(3), "bottom", "none")  # Show legend only on first plot
+      )
+    
+    return(p)
+  })
+}
+
+# Create plots
+abundance_plots <- create_plot(abundance_data, "relative_abundance", "Relative Abundance", "")
+
+abundance_plots
+# Arrange in grid layout with left column for Abundance and right for Biomass
+abundance_plot_save <- wrap_plots(
+  c(abundance_plots), 
+  ncol = 4
+)
+
+# Display combined plot
+abundance_plot_save
+
+# Define output directory
+output_dir <- "PCR_bias_correction/figures/zooscan"
+
+# Save as PNG
+ggsave(
+  filename = file.path(output_dir, "zooscan_abundance_stacked_bar.png"),
+  plot = abundance_plot_save,  # Using the final combined plot
+  dpi = 300,
+  width = 18,  # Adjust for better layout
+  height = 7,
+  units = "in",
+  limitsize = FALSE  # Ensures large plots are not cropped
+  
+)
+
+# Save as PDF
+ggsave(
+  filename = file.path(output_dir, "zooscan_abundance_stacked_bar.pdf"),
+  plot = abundance_plot_save,
+  dpi = 300,
+  width = 18,
+  height = 7,
+  units = "in",
+  limitsize = FALSE  # Ensures large plots are not cropped
+  
+)
 
 
+biomass_plots <- create_plot(biomass_data , "biomass_prop_taxa", "Biomass Proportion", "")
+
+biomass_plots
+# Arrange in grid layout with left column for Abundance and right for Biomass
+biomass_plot_save <- wrap_plots(
+  c(biomass_plots), 
+  ncol = 4
+)
+
+# Display combined plot
+biomass_plot_save
+
+
+
+# Save as PNG
+ggsave(
+  filename = file.path(output_dir, "zooscan_biomass_stacked_bar.png"),
+  plot = biomass_plot_save,  # Using the final combined plot
+  dpi = 300,
+  width = 18,  # Adjust for better layout
+  height = 7,
+  units = "in",
+  limitsize = FALSE  # Ensures large plots are not cropped
+  
+)
+
+# Save as PDF
+ggsave(
+  filename = file.path(output_dir, "zooscan_biomass_stacked_bar.pdf"),
+  plot = biomass_plot_save,
+  dpi = 300,
+  width = 18,
+  height = 7,
+  units = "in",
+  limitsize = FALSE  # Ensures large plots are not cropped
+  
+)
 
 # Calanoids ---------------------------------------------------------------
 
@@ -132,7 +281,7 @@ zoop_calanoid_by_sample_relative_abundance = relative_abundances_map %>%
 #Save Biomass and relative abundances
 write.csv(zoop_calanoid_by_sample,here("PCR_bias_correction/data/Zooscan/zoop_calanoid_by_sample_biomass.csv"))
 write.csv(relative_abundances_map,here("PCR_bias_correction/data/Zooscan/zoop_relative_abundance.csv"))
-write.csv(zooscan_by_sample,here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass.csv"))
+
 
 
 #Zooscan and Calanoid Biomass by cycle
@@ -169,6 +318,93 @@ zoop_calanoid_by_sample %>%
 
 # Analysis ----------------------------------------------------------------
 
+# Taxa Composition by Sample ----------------------------------------------
+
+
+#Biomass
+# Prepare data for plotting
+plot_data <- zooscan_by_sample %>%
+  mutate(Sample_ID_short = sample_id,  # Assuming sample_id is the short version
+         biomass_prop = dryweight_C_mg_sum_taxa / dryweight_C_mg_sum_sample) %>%
+  select(Sample_ID_short, object_annotation_category, biomass_prop)
+
+# Create the stacked bar plot
+ggplot(plot_data, aes(x = Sample_ID_short, 
+                      y = biomass_prop, 
+                      fill = object_annotation_category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(x = "Sample ID", 
+       y = "Proportion of Biomass", 
+       fill = "Taxa Category",
+       title = "Proportion of Biomass by Sample and Taxa Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+#Abundance
+# Custom palette of 10 soft, high-contrast colors
+custom_colors <- c(
+  "#66C2A5", # Soft green
+  "#FC8D62", # Soft orange
+  "#8DA0CB", # Soft blue
+  "#E78AC3", # Soft pink
+  "#A6D854", # Soft lime green
+  "#FFD92F", # Soft yellow
+  "#E5C494", # Soft beige
+  "#B3B3B3", # Soft grey
+  "#A6CEE3", # Soft light blue
+  "#1F78B4"  # Soft dark blue
+)
+
+# Compute relative abundances and filter to top 10 categories
+relative_abundances <- zooscan_processed %>%
+  group_by(sample_id, size_fraction, object_annotation_category) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(sample_id) %>%
+  mutate(total = sum(count),
+         relative_abundance = count / total) %>%
+  ungroup() %>%
+  mutate(Sample_ID_short = sample_id)  # Assuming sample_id is the short version
+
+# Identify top 10 most abundant categories
+top_categories <- relative_abundances %>%
+  group_by(object_annotation_category) %>%
+  summarise(total_abundance = sum(relative_abundance)) %>%
+  arrange(desc(total_abundance)) %>%
+  slice_head(n = 10) %>%
+  pull(object_annotation_category)
+
+# Filter to top 10 categories
+relative_abundances_top10 <- relative_abundances %>%
+  filter(object_annotation_category %in% top_categories)
+
+# Create the stacked bar plot
+ggplot(relative_abundances_top10, aes(x = Sample_ID_short, 
+                                      y = relative_abundance, 
+                                      fill = object_annotation_category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = custom_colors) + # Apply custom color palette
+  labs(
+    title = "Relative Abundance by Sample and Top 10 Taxa Categories",
+    x = "Sample ID",
+    y = "Relative Abundance",
+    fill = "Taxa Category"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10), # Rotate x-axis labels
+    axis.text.y = element_text(size = 10), 
+    axis.title.x = element_text(size = 12), 
+    axis.title.y = element_text(size = 12), 
+    legend.text = element_text(size = 10), 
+    legend.title = element_text(size = 10), 
+    title = element_text(size = 12), 
+    legend.position = "bottom" # Position legend at the bottom
+  )
+
+# -------------------------------------------------------------------------
+
+
 
 # Compute Shannon Diversity Index by site
 # Count the number of individuals for each taxa within each site
@@ -183,7 +419,7 @@ shannon_index <- count_data %>%
 
 shannon_index_plot=shannon_index %>%
   #Make size class a factor
-  mutate(size_fraction=factor(size_fraction, levels = c("0.2-1", "1-5", ">5"))) %>%
+  mutate(size_fraction=factor(size_fraction, levels = c("0.2-1", "1-2", ">5"))) %>%
   left_join(metadata, by=c("sample_id","size_fraction")) %>% 
   distinct(.) 
 
