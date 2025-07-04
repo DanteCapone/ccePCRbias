@@ -723,22 +723,6 @@ family_order <- result_combined_nofilt %>%
   pull(Family)
 
 
-# Compute correlation stats per size fraction
-lm_stats_by_size <- summarized_result %>%
-  filter(Mean > 0) %>%
-  group_by(SizeFraction) %>%
-  summarise(
-    fit = list(lm(log2(Mean) ~ Lambda.mean)),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    r2 = map_dbl(fit, ~ summary(.x)$r.squared),
-    p = map_dbl(fit, ~ summary(.x)$coefficients[2, 4]),
-    annotation = paste0(
-      "R² = ", formatC(r2, digits = 2, format = "f"), "\n",
-      "P = ", ifelse(p < 0.001, "<0.001", formatC(p, digits = 2, format = "f"))
-    )
-  )
 
 # Summarize and set factor order
 summarized_result <- result_combined_nofilt %>%
@@ -930,6 +914,7 @@ zoo_metric="biomass_prop"
 
 #Add biomass sum, calanoid biomass and proportion of calanoid biomass
 taxa_sel="Euphausiacea"
+taxa_sel="Calanoida"
 
 
 #Zooscan biomass proportion
@@ -937,7 +922,8 @@ taxa_sel="Euphausiacea"
 zooscan_all=read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass_esd.csv"), row.names = 1)%>%
   # select(-X, acq_min_mesh) %>% 
   # mutate(Sample_ID=sample_id) %>%  
-  distinct(.)
+  distinct(.) %>% 
+  mutate(PC1=-1*PC1)
 
 
 #Calanoida
@@ -947,17 +933,21 @@ zooscan_taxa=zooscan_all%>%
 
 
 #18S
+
 pcr_and_raw_18s_calanoids=pcr_and_raw_18s_all %>% 
   mutate(Family=taxa) %>% 
   left_join(.,zhan_taxa %>% rownames_to_column("Family") %>% 
               select(Family, Order), by="Family") %>% 
   filter(Order==taxa_sel) %>% 
-  select(-Family,-taxa)%>% 
+  filter(Family != "Eucalanidae") %>% 
+  select(-Family,-taxa)%>%
   filter(Order==taxa_sel) %>%
   group_by(Sample_ID,size_fraction_numeric,cycle) %>% 
   summarise(n_reads_raw=sum(n_reads_raw), 
             n_reads_pcr=sum(n_reads_pcr),
-            PC1=mean(PC1)) 
+            PC1=mean(PC1)) %>% 
+  mutate(n_reads_raw_18s=n_reads_raw, 
+         n_reads_pcr_18s=n_reads_pcr)
   
 #Propotions
 pcr_raw_zoo_18s=zooscan_taxa %>%
@@ -1019,9 +1009,10 @@ cor_results_grid <- pcr_raw_zoo_18s_long %>%
     r = map_dbl(cor_test, ~ .x$estimate),
     p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
     p_bonferroni = pmin(p_uncorrected * n_tests, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
     label = paste0(
       "r = ", formatC(r, digits = 2, format = "f"), "\n",
-      "P = ", ifelse(p_bonferroni < 0.001, "<0.001", formatC(p_bonferroni, digits = 2, format = "f"))
+      "P (BH) = ", ifelse(p_bh < 0.001, "<0.001", formatC(p_bh, digits = 2, format = "f"))
     )
   )
 
@@ -1054,19 +1045,41 @@ zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_18s_long,
   guides(size = FALSE, fill = FALSE) +
   theme_classic() +
   theme(
-    panel.grid.major = element_line(color = "gray80", size = 0.5),  # Major grid lines for readability
-    panel.grid.minor = element_line(color = "gray90", size = 0.2),  # Minor grid lines for subtle separation
-    panel.border = element_rect(color = "black", fill = NA, size = 1),  # Black border around each facet
-    strip.background = element_rect(fill = "lightgray", color = "black"),  # Light gray background for facet labels
-    strip.text = element_text(size = 16, face = "bold"),  # Larger and bold facet labels
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
-    axis.text.y = element_text(size = 14),
-    axis.title = element_text(size = 16)
-  )
+    panel.grid.major = element_line(color = "gray80", size = 0.5),
+    panel.grid.minor = element_line(color = "gray90", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif"))
+    
 
 
 # Print plot
 zoo_vs_pcr_grid
+
+# Compile correlation results into a clean summary table
+cor_summary_table <- cor_results_grid %>%
+  select(size_fraction, y_variable, x_variable, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  rename(
+    `Molecular Metric` = y_variable,
+    `Size Fraction` = size_fraction,
+    `Zooscan Metric` = x_variable,
+    `Pearson R` = r,
+    `p (Uncorrected)` = p_uncorrected,
+    `p (BH)` = p_bh
+  ) %>%
+  arrange(`Molecular Metric`, `Zooscan Metric`, `Size Fraction`)
+
+# View the table
+print(cor_summary_table)
+
+# Optionally write to CSV
+write.csv(cor_summary_table, here("PCR_bias_correction/tables/correlation_summary_table_18s.csv"), row.names = FALSE)
+
 
 
 #Just Absolute biomass
@@ -1101,9 +1114,12 @@ cor_results <- pcr_vs_dryweight %>%
   mutate(
     r = map_dbl(cor_test, ~ .x$estimate),
     p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
-    p_bonferroni = pmin(p_uncorrected * n_tests, 1),  # Bonferroni correction
-    label = paste0("r = ", formatC(r, digits = 2, format = "f"), 
-                   "\nP = ", ifelse(p_bonferroni < 0.001, "<0.001", formatC(p_bonferroni, digits = 2, format = "f")))
+    p_bonferroni = pmin(p_uncorrected * n_tests, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
+    label = paste0(
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.001, "<0.001", formatC(p_bh, digits = 2, format = "f"))
+    )
   )
 
 #Define pastel color palette
@@ -1114,7 +1130,7 @@ ggplot(pcr_vs_dryweight,
        aes(x = log10(dryweight_C_mg_m2_taxa_mean),
            y = asin(sqrt(y_value)),
            fill = size_fraction)) +
-  geom_point(aes(shape = cycle), size = 6, stroke = 1.2, color = "black") +
+  geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
   scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
   scale_fill_manual(values = pastel_colors, labels = size_fraction_labels, name = "Size Fraction") +
   coord_cartesian(xlim = c(0, 3)) +
@@ -1128,9 +1144,9 @@ ggplot(pcr_vs_dryweight,
   geom_text(
     data = cor_results,
     aes(label = label),
-    x = 0.25, y = 0.5,
+    x = 1, y = 0.5,
     inherit.aes = FALSE,
-    size = 4, fontface = "italic"
+    size = 3, fontface = "italic"
   )  +
   guides(
     fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
@@ -1143,31 +1159,31 @@ ggplot(pcr_vs_dryweight,
     panel.grid.minor = element_line(color = "gray90", size = 0.2),
     panel.border = element_rect(color = "black", fill = NA, size = 1),
     strip.background = element_rect(fill = "lightgray", color = "black"),
-    strip.text = element_text(size = 16, face = "bold", family = "serif"),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14, face = "bold", family = "serif"),
-    axis.text.y = element_text(size = 14, face = "bold", family = "serif"),
-    axis.title = element_text(size = 16, face = "bold", family = "serif"),
-    legend.title = element_text(size = 16, face = "bold", family = "serif"),
-    legend.text = element_text(size = 14, family = "serif")
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif")
   )-> methods_correlation_plot
 
 methods_correlation_plot
   #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/calanoid_methods_compare_18s_scatter.png"),
+  filename = here("PCR_bias_correction/figures/v0/figure_5_v0.png"),
   plot = methods_correlation_plot,
   dpi = 600,
-  width = 12, # Adjust width (inches) based on journal requirements
-  height = 7, # Adjust height (inches) based on journal requirements
+  width =6, # Adjust width (inches) based on journal requirements
+  height = 4.5, # Adjust height (inches) based on journal requirements
   units = "in"
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/calanoid_methods_compare_18s_scatter.pdf"),
+  filename = here("PCR_bias_correction/figures/v0/figure_5_v0.pdf"),
   plot = methods_correlation_plot,
   dpi = 600,
-  width = 12, # Adjust width (inches) based on journal requirements
-  height = 7, # Adjust height (inches) based on journal requirements
+  width = 6, # Adjust width (inches) based on journal requirements
+  height = 4.5, # Adjust height (inches) based on journal requirements
   units = "in"
 )
 
@@ -1215,7 +1231,7 @@ ggplot(pcr_raw_zoo_18s_long, aes(x = as.factor(PC1), fill = Method)) +
         legend.position = "right") +
   geom_text(aes(y = relative_abundance_metric, label = is_closer),
             position = position_dodge(width = 0.9), vjust = 0, size = 4) +
-  scale_x_discrete(labels = labels_for_map$Sample_ID_short)->grouped_bar_all_18s
+  scale_x_discrete(labels = labels_for_PC1$Sample_ID_short)->grouped_bar_all_18s
 
 
 
@@ -1391,202 +1407,11 @@ pcr_raw_zoo_18s %>%
         strip.text = element_text(size = 16))
 
 
-# COI ---------------------------------------------------------------------
-
-
-
-
-pcr_and_raw_coi_calanoids=pcr_and_raw_coi_all %>% 
-  mutate(Genus=taxa) %>% 
-  left_join(.,coi_taxa %>% rownames_to_column("Genus") %>% 
-              select(Genus, Order), by="Genus") %>% 
-  filter(Order=="Calanoida") %>% 
-  select(-Genus,-taxa)%>% 
-  filter(Order==taxa_sel) %>%
-  group_by(Sample_ID,size_fraction_numeric,cycle) %>% 
-  summarise(n_reads_raw=sum(n_reads_raw), 
-            n_reads_pcr=sum(n_reads_pcr),
-            PC1=mean(PC1)) 
-
-#Propotions
-pcr_raw_zoo_coi=zooscan_taxa %>%
-  #remove XL size class
-  filter(size_fraction != ">2") %>%
-  left_join(pcr_and_raw_coi_calanoids, by=c("PC1","size_fraction_numeric")) %>% 
-  unique(.)
-
-
-#Format Long and add difference metrics
-pcr_raw_zoo_coi_long <- pivot_longer(pcr_raw_zoo_coi, 
-                                     cols = c(biomass_prop_taxa, n_reads_raw, n_reads_pcr), 
-                                     names_to = "Method", 
-                                     values_to = "relative_abundance_metric") %>%
-  # filter(!is.na(Sample_ID.y)) %>%
-  group_by(Sample_ID.x, size_fraction) %>%
-  mutate(diff_pcr = abs(relative_abundance_metric[Method == "n_reads_pcr"] - relative_abundance_metric),
-         diff_raw = abs(relative_abundance_metric[Method == "n_reads_raw"] - relative_abundance_metric))%>%
-  mutate(is_closer = ifelse(Method == "biomass_prop_taxa" & diff_pcr < diff_raw, "*", 
-                            ifelse(Method == "biomass_prop_taxa" & diff_pcr > diff_raw, "x", NA))) %>%
-  mutate(closest = ifelse(Method == "biomass_prop_taxa" & diff_pcr < 0.05*relative_abundance_metric, "**",NA)) %>%
-  mutate(worse = ifelse(Method == "biomass_prop_taxa" & diff_raw < 0.05*relative_abundance_metric, "xx",NA))
-
-
-
-# Correlations. Make a grid plot of Y axis is:  ----------------------------
-# Raw reads or PCR corrected
-# X is: Zooscan biomass, abundance or relative of each
-# Define facet labels
-facet_x_labels <- c(
-  "biomass_prop_taxa" = "Log10(Biomass Proportion)",
-  "dryweight_C_mg_m2_taxa" = "Log10 (Dry Weight (mg C m²))",
-  "count" = "Log10(Relative Abundance)",
-  "abundance_m2" = "Log10(Abundance (m²))"
-)
-
-facet_y_labels <- c(
-  "n_reads_raw" = "Raw Reads",
-  "n_reads_pcr" = "PCR Bias-Corrected Reads"
-)
-
-size_fraction_labels <- c("0.2-0.5 mm", "0.5-1 mm", "1-2 mm")
-
-# Convert data to long format and filter for log transformations
-pcr_raw_zoo_coi_long <- pcr_raw_zoo_coi %>%
-  filter(!is.na(cycle)) %>%
-  pivot_longer(cols = c(biomass_prop_taxa, dryweight_C_mg_m2_taxa, count, abundance_m2), 
-               names_to = "x_variable", values_to = "x_value") %>%
-  pivot_longer(cols = c(n_reads_raw, n_reads_pcr), 
-               names_to = "y_variable", values_to = "y_value") %>%
-  filter(x_value > 0, y_value >= 0) %>%  # Ensure valid sqrt transform (y_value >= 0)
-  mutate(
-    x_variable = factor(x_variable, levels = names(facet_x_labels), labels = facet_x_labels),
-    y_variable = factor(y_variable, levels = names(facet_y_labels), labels = facet_y_labels),
-    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2"))
-  )
-
-# Create 6-row, 4-column facet grid plot
-zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_coi_long, 
-                          aes(x = log10(x_value), 
-                              y = asin(sqrt(y_value)))) +  # Apply asin sqrt transformation
-  geom_point(aes(shape = cycle, size = 3, color = as.factor(size_fraction), fill = as.factor(size_fraction))) +
-  scale_shape_manual(values = c("1" = 21, "2" = 22, "3"=24, "T1"=23, "T2"=25)) +
-  scale_fill_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), 
-                    labels = size_fraction_labels) +
-  scale_color_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), 
-                     labels = size_fraction_labels) +
-  facet_grid(rows = vars(size_fraction, y_variable), cols = vars(x_variable), scales = "free") +  # 6x4 layout
-  labs(
-    x = "Log10 Transformed X-Axis Variables",
-    y = "asin(sqrt(Read Counts))",
-    shape = "Cycle",
-    color = "Size Fraction"
-  ) +
-  stat_cor(method = "pearson", label.x = -1, label.y = 1) +  # Pearson correlation
-  guides(size = FALSE, fill = FALSE) +
-  theme_classic() +
-  theme(
-    panel.grid.major = element_line(color = "gray80", size = 0.5),  # Major grid lines for readability
-    panel.grid.minor = element_line(color = "gray90", size = 0.2),  # Minor grid lines for subtle separation
-    panel.border = element_rect(color = "black", fill = NA, size = 1),  # Black border around each facet
-    strip.background = element_rect(fill = "lightgray", color = "black"),  # Light gray background for facet labels
-    strip.text = element_text(size = 16, face = "bold"),  # Larger and bold facet labels
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
-    axis.text.y = element_text(size = 14),
-    axis.title = element_text(size = 16)
-  )
-
-
-# Print plot
-(zoo_vs_pcr_grid)
-
-
-
-#Plot grouped bar plot for RRA, PCR-RA, Zoo-PB proporitions
-
-
-pcr_raw_zoo_coi_long %>%
-  ggplot(., aes(x = as.factor(PC1), y = relative_abundance_metric, fill = Method)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_wrap(~size_fraction, nrow=3, scale="free_y") +
-  theme_minimal() +
-  labs(title = "",
-       x = expression(paste("Offshore ", PC1, " Onshore")),
-       y = "Proportion Reads or Biomass ",
-       fill = "Method") +
-  coord_cartesian(ylim=c(0,1.1)) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 16),
-        axis.text.y = element_text(size = 16),
-        axis.title = element_text(size = 16, face = "bold"),
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        strip.text = element_text(size = 16),
-        legend.text = element_text(size = 16),
-        legend.title = element_text(size = 16),
-        legend.key.size = unit(1.5, "lines"),
-        legend.position = "right") +
-  geom_text(aes(label = is_closer), position = position_dodge(width = 0.9), vjust = 0, size = 9) +
-  scale_fill_manual(values = c("#70BF41", "#4F86F7", "#F78D4F"),
-                    labels = c("Zooscan Biomass", "PCR-corrected", "Raw Reads")) +
-  # geom_errorbar(aes(ymin = p.2.5, ymax = p.97.5), position = position_dodge(width = 0.9), width = 0.25) +
-  scale_shape_manual(values = c(16, 17, 18)) +  # Define shapes for each Method
-  scale_linetype_manual(values = c("solid", "dashed", "dotted")) + 
-  ylim(0, 1.1)+
-  scale_x_discrete(labels = labels_for_map$Sample_ID_short)+# Define linetypes for each Method
-  scale_color_manual(values = c("#70BF41", "#4F86F7", "#F78D4F")) -> grouped_bar_all_coi  # Define colors for each Method
-
-grouped_bar_all_coi
-#PNG & PDF Save
-ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/calanoid_methods_compare_coi.png"),
-  plot = grouped_bar_all_coi,
-  dpi = 600,
-  width = 10, # Adjust width (inches) based on journal requirements
-  height = 7, # Adjust height (inches) based on journal requirements
-  units = "in"
-)
-
-ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/calanoid_methods_compare_coi.pdf"),
-  plot = grouped_bar_all_coi,
-  dpi = 600,
-  width = 10, # Adjust width (inches) based on journal requirements
-  height = 7, # Adjust height (inches) based on journal requirements
-  units = "in"
-)
-
-#Scatter Plot
-pcr_raw_zoo_coi %>%
-  filter(!is.na(cycle))%>%
-  ggplot(.,aes(x=log10(((dryweight_C_mg_m2_taxa))), y=((n_reads_raw))))+
-  geom_point(aes(shape=cycle, size=8,color=as.factor(size_fraction),fill=as.factor(size_fraction)))+
-  scale_shape_manual(values = c("1" = 21, "2" = 22, "3"=24, "T1"=23, "T2"=25)) +
-  scale_fill_manual(values=c("#5BA3D5", "#66CC66", "#FF4C38"), labels=c("0.2-0.5 mm","0.5-1 mm","1-2 mm")) +
-  scale_color_manual(values=c("#5BA3D5", "#66CC66", "#FF4C38"), labels=c("0.2-0.5 mm","0.5-1 mm","1-2 mm")) +
-  # geom_smooth(method = "lm", se = TRUE, color = "black", formula = y ~ x) +  # Add linear regression line
-  # facet_wrap(~size_fraction, nrow=3, scale="free_y") +
-  labs(x = "Zooscan Biomass (CLR)", y = "PCR Bias-Mitigated Read Abundance (CLR)", shape = "Cycle", color = "Size Fraction") +  # Add axis labels
-  ggtitle("Pearson Correlation between Zooscan Biomass and PCR Bias-Mitigated Relative Abundance")+
-  stat_cor(method = "pearson", label.x = 0.2, label.y =.5)+
-  guides(size = FALSE, fill=FALSE) +
-  theme_classic()+
-  theme(axis.text.x = element_text(hjust = 1, size = 14),
-        axis.text.y = element_text(size = 14),
-        axis.title = element_text(size = 16),
-        strip.text = element_text(size = 16))->zoo_vs_pcr
-zoo_vs_pcr
-
-
-
-
-
 
 
 # Supporting Information --------------------------------------------------
 
-
-
 #Figure S
-
-
 # Load data
 all_amp_effs_18s <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_18s_all_sub.csv")) %>%
   mutate(Family = str_extract(Lambda.coord, "[^_]+$"))
@@ -2013,38 +1838,41 @@ taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.cs
 # Load and merge amplification efficiency data
 all_amp_effs_18s_asv_nofilt <- read.csv(here("PCR_bias_correction/data/amp_effs/amp_effs_18s_asv_nofilt.csv"), row.names = 1) %>%
   mutate(Hash = str_extract(Lambda.coord, "[^_]+$")) %>%
-  left_join(taxa_18s %>% select(Hash, Species), by = "Hash") %>%
-  mutate(Species = replace_na(Species, "other"),
-         Species_simple = str_remove(Species, "\\sASV\\s\\d+$"))
+  left_join(taxa_18s %>% select(Hash, Family,Order), by = "Hash") %>% 
+  mutate(Family = ifelse(Family == "" & Order == "Calanoida", "unidentified Calanoida", Family))%>% 
+  mutate(Family = ifelse(Family == "other" & Order == "Collodaria", "unidentified Collodaria", Family)) %>% 
+  mutate(Family = ifelse(Family == "" & Order == "Siphonophorae", "unidentified Siphonophorae", Family)) %>% 
+  mutate(Family = replace_na(Family, "other"),
+         Family_simple = str_remove(Family, "\\sASV\\s\\d+$")) 
 
-# Determine species order by mean Lambda.mean
-ordered_species <- all_amp_effs_18s_asv_nofilt %>%
-  group_by(Species_simple) %>%
+# Determine Family order by mean Lambda.mean
+ordered_Family <- all_amp_effs_18s_asv_nofilt %>%
+  group_by(Family_simple) %>%
   summarise(mean_lambda = mean(Lambda.mean, na.rm = TRUE)) %>%
   arrange(mean_lambda) %>%
-  pull(Species_simple)
+  pull(Family_simple)
 
-# Determine hash order within species by mean Lambda.mean
+# Determine hash order within Family by mean Lambda.mean
 hash_order_df <- all_amp_effs_18s_asv_nofilt %>%
-  group_by(Species_simple, Hash) %>%
+  group_by(Family_simple, Hash) %>%
   summarise(mean_lambda = mean(Lambda.mean, na.rm = TRUE), .groups = "drop") %>%
-  group_by(Species_simple) %>%
+  group_by(Family_simple) %>%
   arrange(mean_lambda, .by_group = TRUE) %>%
   mutate(hash_order = row_number())
 
 # Join hash order and define group label
 all_amp_effs_18s_asv_nofilt <- all_amp_effs_18s_asv_nofilt %>%
-  left_join(hash_order_df, by = c("Species_simple", "Hash")) %>%
+  left_join(hash_order_df, by = c("Family_simple", "Hash")) %>%
   mutate(
     size_fraction = factor(size_fraction, levels = c(0.2, 0.5, 1)),
-    Species_simple = factor(Species_simple, levels = ordered_species),
-    group = paste(Species_simple, sprintf("h%02d", hash_order), size_fraction, sep = "_"),
-    x_label = ifelse(size_fraction == 0.5, as.character(Species_simple), "")
+    Family_simple = factor(Family_simple, levels = ordered_Family),
+    group = paste(Family_simple, sprintf("h%02d", hash_order), size_fraction, sep = "_"),
+    x_label = ifelse(size_fraction == 0.5, as.character(Family_simple), "")
   )
 
 # Create ordered group factor
 ordered_groups <- all_amp_effs_18s_asv_nofilt %>%
-  arrange(Species_simple, hash_order, size_fraction) %>%
+  arrange(Family_simple, hash_order, size_fraction) %>%
   pull(group) %>%
   unique()
 
@@ -2054,32 +1882,24 @@ all_amp_effs_18s_asv_nofilt <- all_amp_effs_18s_asv_nofilt %>%
 
 # Define y-axis limits and breaks
 lambda_range <- range(all_amp_effs_18s_asv_nofilt$Lambda.mean, na.rm = TRUE)
-max_abs <- max(abs(lambda_range)) * 1.5
+max_abs <- max(abs(lambda_range)) * 1.2
 y_limits <- c(-max_abs, max_abs)
 y_breaks <- seq(from = floor(y_limits[1] * 10) / 10,
                 to   = ceiling(y_limits[2] * 10) / 10,
                 by = 0.1)
 
-species_colors <- c(
-  "Calanus helgolandicus" = "#77DD77",
-  "Metridia pacifica" = "#9370DB",
-  "unidentified Collodaria" = "#912330",
-  "unidentified Euphausiidae" = "#FF6961",
-  "unidentified Calanus" = "#2d8087",
-  "other" = "grey",
-  "Paracalanus parvus" = "#eb6098"
-)
+
 
 x_labels_named <- all_amp_effs_18s_asv_nofilt %>%
   mutate(group_chr = as.character(group)) %>%
-  group_by(Species_simple) %>%
+  group_by(Family_simple) %>%
   arrange(hash_order, size_fraction) %>%
   slice(floor(n() / 2) + 1) %>%
   ungroup() %>%
-  select(group_chr, Species_simple) %>%
+  select(group_chr, Family_simple) %>%
   mutate(
     group_chr = as.character(group_chr),
-    Species_simple = as.character(Species_simple)
+    Family_simple = as.character(Family_simple)
   ) %>%
   deframe()
 
@@ -2092,47 +1912,71 @@ all_amp_effs_18s_asv_nofilt <- all_amp_effs_18s_asv_nofilt %>%
 
 
 # Create final plot
-amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt <- ggplot(all_amp_effs_18s_asv_nofilt, aes(x = group, y = Lambda.mean,
-                                                                                            color = Species,
-                                                                                            shape = as.factor(size_fraction))) +
+all_amp_effs_18s_asv_nofilt$Family <- factor(
+  all_amp_effs_18s_asv_nofilt$Family,
+  levels = names(taxa_colors_18s)
+)
+
+amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt <- ggplot(all_amp_effs_18s_asv_nofilt %>% 
+                                                             filter(Family !=""), aes(x = group, y = Lambda.mean,
+                                                                                            fill = Family,
+                                                                                            shape = (size_fraction))) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", size = 0.8) +
-  geom_errorbar(aes(ymin = Lambda.p2.5, ymax = Lambda.p97.5), width = 0., size = 0.8) +
-  geom_point(size = 2, stroke = 1) +
-  scale_shape_manual(name = "Size Fraction",
-                     values = c("0.2" = 16, "0.5" = 17, "1" = 18),
-                     labels = c("0.2-0.5 mm", "0.5-1 mm", "1-2 mm")) +
+  # Colored error bars (uses 'color' aesthetic)
+  geom_errorbar(aes(ymin = Lambda.p2.5, ymax = Lambda.p97.5, color = Family), width = 0.1, size = 0.8) +
+  
+  # Filled points with outlines
+  geom_point(aes(fill = Family, shape=size_fraction), size = 3, stroke = 0.5, color = "black") +  # do NOT map color here
+  scale_shape_manual(
+    name = "Size Fraction",
+    values = c("0.2" = 21, "0.5" = 22, "1" = 24),
+    labels = c("0.2-0.5 mm", "0.5-1 mm", "1-2 mm")
+  )+
+  scale_color_manual(values = taxa_colors_18s, guide = "none") +
   scale_x_discrete(labels = NULL)+
+  scale_fill_manual(values = taxa_colors_18s) +
   scale_y_continuous(
     limits = y_limits,
-    breaks = y_breaks,
+    breaks = scales::pretty_breaks(n = 6),
     labels = scales::number_format(accuracy = 0.1)
   ) +
   labs(
     x = "",
     y = "Amplification Efficiency (CLR)"
   ) +
-  theme_minimal() +
-  # guides(color = "none") +
+  theme_minimal(base_size = 8, base_family = "sans") +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, size = 8),
-    axis.text.y = element_text(size = 10),
-    axis.title = element_text(size = 10, face = "bold"),
-    plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
-    strip.text = element_text(size = 10),
-    legend.text = element_text(size = 8),
-    legend.title = element_text(size = 10),
-    legend.key.size = unit(1, "lines"),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 9),
+    axis.title = element_text(size = 8, face = "bold"),
+    plot.title = element_text(size = 8, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 8, face = "bold"),
+    
+    # Legend aesthetics
     legend.position = "bottom",
-    legend.box.spacing = unit(0.01, "lines"),
-    legend.spacing.y = unit(0.01, "lines"),
-    legend.margin = margin(0, 0, 0, 0)
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9, face = "bold"),
+    legend.key.size = unit(0.8, "lines"),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.spacing.x = unit(0.2, "lines"),
+    legend.spacing.y = unit(0.2, "lines"),
+    legend.box.spacing = unit(0.2, "lines"),
+    legend.box.margin = margin(0, 0, 0, 0)
   ) +
   guides(
-    color = guide_legend(ncol = 4, title.position = "top", title.hjust = 0.5),
-    shape = guide_legend(ncol = 1, title.position = "top", title.hjust = 0.5)
+    fill = guide_legend(
+      ncol = 5,
+      title.position = "top",
+      title.hjust = 0.5,
+      override.aes = list(shape = 21, fill = unname(taxa_colors_18s))
+    ),
+    shape = guide_legend(
+      ncol = 1,
+      title.position = "top",
+      title.hjust = 0.5
+    )
   )+
-  facet_wrap(~size_fraction, ncol=1)
-
+  facet_wrap(~size_fraction, nrow=3)
 
 # View the plot
 amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt
@@ -2146,7 +1990,7 @@ ggsave(
   plot = amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt,
   dpi = 600,
   width = 7,
-  height = 6,
+  height = 5,
   units = "in",
 )
 
@@ -2156,7 +2000,7 @@ ggsave(
   plot = amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt,
   dpi = 600,
   width = 7,
-  height = 6,
+  height = 5,
   units = "in",
 )
 
@@ -2412,10 +2256,75 @@ ggsave(
 )
 
 
+# Histogram of amplification efficiencies for ASVs
+
+# Freedman-Diaconis function
+bin_width_fd <- function(x) {
+  iqr <- IQR(x, na.rm = TRUE)
+  n <- sum(!is.na(x))
+  if (n <= 1 || iqr == 0) return(0.05)  # safe fallback
+  2 * iqr / (n^(1/3))
+}
+
+# Size fraction labels
+facet_labels <- c("0.2" = "0.2–0.5 mm", "0.5" = "0.5–1 mm", "1" = "1–2 mm")
+
+# Create histograms per size_fraction
+histograms <- lapply(unique(all_amp_effs_18s_asv_nofilt$size_fraction), function(sf) {
+  df_sf <- all_amp_effs_18s_asv_nofilt %>% filter(size_fraction == sf)
+  bw <- bin_width_fd(df_sf$Lambda.mean)
+  
+  ggplot(df_sf, aes(x = Lambda.mean)) +
+    geom_histogram(
+      bins=6,
+      fill = "gray60",
+      color = "black",
+      alpha = 0.9
+    ) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray30", linewidth = 0.8) +
+    labs(
+      x = "Amplification Efficiency (CLR slope)",
+      y = "Number of Taxa",
+      title = facet_labels[as.character(sf)]
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 9, face = "bold"),
+      axis.text = element_text(size = 8),
+      panel.grid.major = element_line(size = 0.4, color = "gray85"),
+      panel.grid.minor = element_blank()
+    )
+})
+
+# Combine plots in a row
+hist_amp_effs_faceted <- wrap_plots(histograms, nrow = 3)
+
+# View the combined figure
+hist_amp_effs_faceted
+
+ggsave(
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.png"),
+  plot = hist_amp_effs,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+ggsave(
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
+  plot = hist_amp_effs,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
 # Log2 Bias from Silverman ------------------------------------------------
 
 #Plot Bias as the log ratio of the proportions
-# ---- 1️⃣ Calculate log2 Fold Change and Error Bars ----
+# ---- Calculate log2 Fold Change and Error Bars ----
 # Step 1: Calculate log2 bias and CI bounds
 bias_df <- pcr_and_raw_18s_all %>%
   mutate(
@@ -2480,6 +2389,211 @@ ggplot(bias_summary, aes(x = taxa, y = log2_bias, color = taxa, shape = as.facto
 
 # COI Analysis --------------------------------------------------------------------
 
+# Function to dynamically load the most recent file with optional '_nofilt'
+load_most_recent_file <- function(suffix, primer, nofilt = TRUE) {
+  library(dplyr)
+  library(stringr)
+  library(here)
+  
+  # Directory path
+  target_dir <- here("PCR_bias_correction/data/predicted_og/")
+  
+  # Adjust pattern based on `nofilt` argument
+  pattern <- paste0(
+    "predicted_og_", primer, "_\\d{2}_\\d{2}_\\d{4}_", suffix,
+    if (nofilt) "_nofilt" else "",
+    ".csv"
+  )
+  
+  # List matching files
+  files <- list.files(
+    target_dir,
+    pattern = pattern,
+    full.names = TRUE
+  )
+  
+  if (length(files) == 0) {
+    stop(paste("No files found for suffix:", suffix, "with nofilt =", nofilt))
+  }
+  
+  # Extract date
+  extract_date <- function(file) {
+    match <- regmatches(file, regexpr("\\d{2}_\\d{2}_\\d{4}", file))
+    as.Date(match, format = "%m_%d_%Y")
+  }
+  
+  # Find latest
+  files_with_dates <- data.frame(
+    file = files,
+    date = sapply(files, extract_date)
+  )
+  
+  latest_file <- files_with_dates %>%
+    arrange(desc(date)) %>%
+    slice(1) %>%
+    pull(file)
+  
+  # Read and process
+  read.csv(latest_file) %>%
+    select(-X) %>%
+    mutate(coord = str_remove(coord, "^clr_"))
+}
+
+
+# Load files dynamically for s1, s2, and s3
+fido_s1_coi <- load_most_recent_file("s1","coi", nofilt = FALSE)
+fido_s2_coi <- load_most_recent_file("s2","coi", nofilt = FALSE)
+fido_s3_coi <- load_most_recent_file("s3","coi", nofilt = FALSE)
+
+#Merge
+final_data_all_sizes_coi=rbind(fido_s1_coi,fido_s2_coi,fido_s3_coi) %>%
+  mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) 
+
+#Make final dataframe
+phy_taxa_pcr_coi= final_data_all_sizes_coi %>%
+  filter(cycle_num==0) %>% 
+  mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) %>%
+  left_join(.,env_metadata, by="Sample_ID")%>%
+  mutate(taxa = coord)
+
+#Taxa file from pre-processed fido families for 18S
+coi_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv"))  %>% 
+  select(-X) %>% 
+  distinct() %>% 
+  filter(Family != "Cliidae") %>% 
+  column_to_rownames("Genus")
+
+#Filter to calanoida
+taxa_pcr_coi=phy_taxa_pcr_coi %>% mutate(Genus=taxa) %>%
+  left_join(.,coi_taxa %>% rownames_to_column("Genus"), by="Genus") %>%
+  filter(Order=="Calanoida") 
+
+#All taxa
+pcr_join_prop_coi=phy_taxa_pcr_coi %>%
+  mutate(Sample_ID=Sample_ID_dot) %>%
+  group_by(Sample_ID,size_fraction_numeric,PC1,cycle,taxa) %>%
+  summarise(n_reads_pcr=sum(n_reads),
+            p.2.5=min(p2.5),
+            p.97.5=max(p97.5))
+
+
+# Raw Reads Relative Abundance Data using taxa that went into fido --------
+
+# Function to load + process one raw phy file
+load_fido_raw_phy <- function(suffix, primer, nofilt = TRUE) {
+  # Build filename dynamically
+  file_name <- paste0(
+    "fido_", primer, "_", suffix, "_genus_phy_all_subpools",
+    if (nofilt) "_nofilt" else "",
+    ".csv"
+  )
+  
+  # Full path
+  file_path <- here("PCR_bias_correction/data/fido/phy/", file_name)
+  
+  # Read + process
+  read.csv(file_path, row.names = 1) %>%
+    rownames_to_column("Genus") %>% 
+    select(-starts_with("X")) %>%
+    pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
+    mutate(Sample_ID_short = str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
+    group_by(Sample_ID_short, Genus) %>%
+    summarise(n_reads = sum(n_reads), .groups = "drop") %>%
+    filter(!grepl("All", Sample_ID_short)) %>%
+    pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
+}
+
+# Load each subpool raw phy
+fido_s1_raw <- load_fido_raw_phy("s1", "coi", nofilt = FALSE)
+fido_s2_raw <- load_fido_raw_phy("s2", "coi", nofilt = FALSE)
+fido_s3_raw <- load_fido_raw_phy("s3", "coi", nofilt = FALSE)
+
+
+# Merge all
+fido_coi_merged_raw <- merge(fido_s1_raw, fido_s2_raw, by = "Genus", all = TRUE) %>%
+  merge(fido_s3_raw, by = "Genus", all = TRUE) %>%
+  column_to_rownames("Genus") %>%
+  mutate(across(everything(), ~ coalesce(., 0)))
+
+#Metadata
+env_metadata_phy=env_metadata %>%
+  column_to_rownames("Sample_ID_dot")
+
+#Make phyloseq objects
+OTU = otu_table(as.matrix(fido_coi_merged_raw), taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(coi_taxa))
+meta=sample_data(env_metadata_phy)
+
+#Raw in counts
+phy_coi_raw_counts=phyloseq(OTU, TAX, meta) %>% 
+  phyloseq_transform_to_long(.) %>%
+  mutate(Genus=asv_code) %>% 
+  select(-asv_code)
+
+
+#Raw in Proportions
+phy_coi=transform_sample_counts(phyloseq(OTU, TAX, meta), function(x) x / sum(x))%>%
+  phyloseq_transform_to_long(.) %>%
+  mutate(Genus=asv_code) %>%
+  select(-asv_code)
+
+
+
+#Filter to calanoid copepods
+taxa_sel="Calanoida"
+
+
+#2. Join with PCR Proportions
+#All taxa
+pcr_and_raw_coi_all=
+  phy_coi %>% 
+  mutate(taxa=Genus) %>% 
+  group_by(Sample_ID,taxa, size_fraction_numeric,PC1) %>% 
+  summarise(n_reads_raw=sum(n_reads)) %>% 
+  left_join(pcr_join_prop_coi, by=c("Sample_ID","taxa","size_fraction_numeric","PC1"))
+
+#3. Join in counts
+phy_coi_raw_counts %>% 
+  filter(Order==taxa_sel) %>%
+  group_by(Sample_ID,size_fraction_numeric) %>%
+  summarise(n_reads_raw=sum(n_reads)) %>%  
+  left_join(pcr_join_prop_coi, by="Sample_ID") %>%
+  select(-size_fraction_numeric.x) %>%
+  rename(size_fraction_numeric=size_fraction_numeric.y)->pcr_and_raw_coi_counts
+
+#Add PCR-bias corrected counts
+counts_raw_all_coi=phy_coi_raw_counts %>% 
+  group_by(Sample_ID,size_fraction_numeric) %>%
+  summarise(n_reads_raw_sum=sum(n_reads)) %>% 
+  select(Sample_ID,size_fraction_numeric,n_reads_raw_sum)
+
+
+pcr_and_raw_coi_counts=pcr_and_raw_coi_counts %>% 
+  left_join(.,counts_raw_all_coi,by=c("Sample_ID","size_fraction_numeric")) %>% 
+  mutate(n_reads_pcr_counts=n_reads_pcr*n_reads_raw_sum)
+
+#Make phyloseq objects
+OTU = otu_table(as.matrix(fido_coi_merged_raw), taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(coi_taxa))
+meta=sample_data(env_metadata_phy)
+
+#Raw in counts
+phy_coi_raw_counts=phyloseq(OTU, TAX, meta) %>% 
+  phyloseq_transform_to_long(.) %>%
+  mutate(Genus=asv_code) %>% 
+  select(-asv_code)
+
+
+#Raw in Proportions
+phy_coi=transform_sample_counts(phyloseq(OTU, TAX, meta), function(x) x / sum(x))%>%
+  phyloseq_transform_to_long(.) %>%
+  mutate(Genus=asv_code) %>%
+  select(-asv_code)
+
+#Filter to calanoid copepods
+taxa_sel="Calanoida"
+
+#2. Join with PCR Proportions
 
 # COI ---------------------------------------------------------------------
 plot_data_coi=pcr_and_raw_coi_all %>%
@@ -2503,8 +2617,9 @@ plot_data_coi=pcr_and_raw_coi_all %>%
   ) %>%
   group_by(Sample_ID_short, Metric, size_fraction_numeric) %>%
   # Normalize reads within each Sample_ID for both metrics
-  mutate(Proportion = Reads / sum(Reads, na.rm = TRUE))
-
+  mutate(Proportion = Reads / sum(Reads, na.rm = TRUE)) %>% 
+  filter(!is.na(size_fraction_numeric)) 
+  
 
 # Create custom labels for size_fraction_numeric and Metric
 facet_labels <- list(
@@ -2536,7 +2651,8 @@ custom_labeller <- labeller(
 
 
 # PC1 Labels
-labels_for_PC1 <- metadata %>% 
+labels_for_PC1 <- env_metadata %>% 
+  mutate(PC1=-1*PC1)%>% 
   ungroup() %>%
   select(Sample_ID_short, PC1) %>%
   unique() %>%
@@ -2545,22 +2661,30 @@ labels_for_PC1 <- metadata %>%
 #Colors
 # Define the new taxa color palette
 taxa_colors_coi <- c(
-  "Euphausia" = "#FF6961",          # Pastel red (from Euphausiidae)
-  "Ctenocalanus" = "#77DD77",       # Pastel green (from Calanidae)
-  "Calanus" = "#77DD77",            # Pastel green (from Calanidae)
-  "Eucalanus" = "#89CFF0",          # Baby blue (from Eucalanidae)
-  "Clausocalanus" = "#72872d",      # Bright pastel green (from Clausocalanidae)
-  "Pleuromamma" = "#9370DB",        # Pastel purple (from Metridinidae)
-  "Rosacea" = "#912330",            # Pastel orange (from unidentified Collodaria)
-  "Sagitta" = "#CDA4DE",            # Pastel lavender (from unidentified Siphonophorae)
-  "Metridia" = "#9370DB",           # Pastel purple (from Metridinidae)
-  "Acrocalanus" = "#eb6098",        # Lime pastel green (from Paracalanidae)
-  "unidentified Halocyprididae" = "#2d8087",  # Matching unidentified Calanoida
-  "Acartia" = "#f0ca62",            # Light blue (from Oithonidae)
-  "Ditrichocorycaeus" = "#FFB6C1"   # Pastel pink (from Salpidae)
+  "other" = "grey",
+  "Euphausia" = "#FF6961",          # Pastel red
+  "Ctenocalanus" = "#4682B4",       # Steel blue
+  "Calanus" = "#0e9c38",            # Pastel green
+  "Eucalanus" = "#89CFF0",          # Baby blue
+  "Clausocalanus" = "#72872d",      # Olive green
+  "Pleuromamma" = "#628be3",        # Light periwinkle
+  "Rosacea" = "#CDA4DE",            # Lavender
+  "Sagitta" = "#89f57f",            # Mint green
+  "Metridia" = "#9370DB",           # Purple
+  "Acrocalanus" = "#eb6098",        # Pink-lilac
+  "unidentified Halocyprididae" = "#f5971d",  # Orange-gold
+  "Acartia" = "#f0ca62",            # Pale yellow
+  "Ditrichocorycaeus" = "#FFB6C1",  # Light pink
+  "Membranipora" = "#8B008B",       # Dark magenta (distinct for bryozoan)
+  "Hematodinium" = "#DC143C",       # Crimson red (flagged parasitic)
+  "Paraeuchaeta" = "#20B2AA",        # Light sea green (copepod, carnivore)
+  # "unidentified" = "#7c8087",
+  "Sphaeronectes" = "#d9256d",              # Turquoise / teal (new addition)
+  "other Calanoida" = "#655882",
+   "unidentified Calanoida"= "#7688a6"
 )
 
-fig1 <- ggplot(plot_data_coi, aes(x = Sample_ID_short, y = Proportion, fill = taxa)) +
+fig1 <- ggplot(plot_data_coi, aes(x = as.factor(PC1), y = Proportion, fill = taxa)) +
   geom_bar(stat = "identity", position = "stack") + # Stacked bar plot
   facet_grid(Metric ~ size_fraction_numeric, scales = "free_y", labeller = custom_labeller) + # Apply custom labels
   scale_fill_manual(values = taxa_colors_coi) + # Apply custom taxa colors
@@ -2573,40 +2697,40 @@ fig1 <- ggplot(plot_data_coi, aes(x = Sample_ID_short, y = Proportion, fill = ta
   ) +
   theme_minimal() +
   theme(
-    axis.text.y = element_text(angle = 45, hjust = 1, size = 16),  # Increased for better readability (O)
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 16),  # Increased for better readability (O)
-    axis.title.x = element_text(size = 16),  # Larger axis title (O)
-    axis.title.y = element_text(size = 16),  # Larger y-axis title (O)
+    axis.text.y = element_text(angle = 45, hjust = 1, size = 8),  # Increased for better readability (O)
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  # Increased for better readability (O)
+    axis.title.x = element_text(size = 8),  # Larger axis title (O)
+    axis.title.y = element_text(size = 8),  # Larger y-axis title (O)
     plot.title = element_text(size = 18, face = "bold"),  # Increased title size (O)
-    strip.text = element_text(face = "bold", size = 16), # Facet text size
-    legend.text = element_text(size = 16),  # Larger legend text (L)
-    legend.title = element_text(size = 16, face = "bold"),  # Larger, bold legend title (L)
+    strip.text = element_text(face = "bold", size = 8), # Facet text size
+    legend.text = element_text(size = 8),  # Larger legend text (L)
+    legend.title = element_text(size = 8, face = "bold"),  # Larger, bold legend title (L)
     legend.position = "bottom",
     panel.spacing = unit(0.8, "lines"))  # Reduce spacing for compact fit)  # Show legend only on first plot
 
 fig1
 
 # Define output directory
-output_dir <- "PCR_bias_correction/figures/v0"
+output_dir <- "PCR_bias_correction/figures/supporting_info/coi/"
 
 # Save the plot as PNG
 ggsave(
-  filename = file.path(output_dir, "figure_2_v0.png"),
+  filename = file.path(output_dir, "stacked_bar_coi.png"),
   plot = fig1,
   dpi = 600,
-  width = 18,
-  height = 7,
-  units = "in",
+  width = 7,
+  height = 4.5,  # adjust if needed
+  units = "in"
 )
 
 # Save the plot as PDF
 ggsave(
-  filename = file.path(output_dir, "figure_2_v0.pdf"),
+  filename = file.path(output_dir, "stacked_bar_coi.pdf"),
   plot = fig1,
   dpi = 600,
-  width = 18,
-  height = 7,
-  units = "in",
+  width = 7,
+  height = 4.5,  # adjust if needed
+  units = "in"
 )
 
 
@@ -2644,7 +2768,7 @@ fig1_order <- ggplot(plot_data_coi, aes(x = Sample_ID_short, y = Proportion, fil
     axis.text.x = element_text(angle = 45, hjust = 1, size = 16),  # Increased for better readability (O)
     axis.title.x = element_text(size = 16),  # Larger axis title (O)
     axis.title.y = element_text(size = 16),  # Larger y-axis title (O)
-    plot.title = element_text(size = 18, face = "bold"),  # Increased title size (O)
+    plot.title = element_text(size = 10, face = "bold"),  # Increased title size (O)
     legend.text = element_text(size = 16),  # Larger legend text (L)
     strip.text = element_text(face = "bold", size = 16), # Facet text size
     legend.title = element_text(size = 16, face = "bold"),  # Larger, bold legend title (L)
@@ -2654,27 +2778,29 @@ fig1_order <- ggplot(plot_data_coi, aes(x = Sample_ID_short, y = Proportion, fil
 fig1_order
 
 # Define output directory
-output_dir <- "PCR_bias_correction/figures/v0"
+output_dir <- "PCR_bias_correction/figures/supporting_info/coi/"
 
 # Save the plot as PNG
-ggsave(
-  filename = file.path(output_dir, "figure_2_v0_order.png"),
-  plot = fig1_order,
-  dpi = 600,
-  width = 18,
-  height = 7,
-  units = "in",
-)
-
-# Save the plot as PDF
-ggsave(
-  filename = file.path(output_dir, "figure_2_v0_order.pdf"),
-  plot = fig1_order,
-  dpi = 600,
-  width = 18,
-  height = 7,
-  units = "in",
-)
+if(saving==1){
+  ggsave(
+    filename = file.path(output_dir, "figure_2_v0_order.png"),
+    plot = fig1_order,
+    dpi = 600,
+    width = 18,
+    height = 7,
+    units = "in",
+  )
+  
+  # Save the plot as PDF
+  ggsave(
+    filename = file.path(output_dir, "figure_2_v0_order.pdf"),
+    plot = fig1_order,
+    dpi = 600,
+    width = 18,
+    height = 7,
+    units = "in",
+  )
+}
 
 
 # Define the new taxa color palette
@@ -2690,22 +2816,27 @@ taxa_colors_coi <- c(
   "Sagitta" = "#89f57f",            # Mint green
   "Metridia" = "#9370DB",           # Purple
   "Acrocalanus" = "#eb6098",        # Pink-lilac
-  "unidentified Halocyprididae" = "#f5971d",  # Orange-gold
+  # "unidentified Halocyprididae" = "#f5971d",  # Orange-gold
   "Acartia" = "#f0ca62",            # Pale yellow
   "Ditrichocorycaeus" = "#FFB6C1",  # Light pink
   "Membranipora" = "#8B008B",       # Dark magenta (distinct for bryozoan)
-  "Hematodinium" = "#DC143C",       # Crimson red (flagged parasitic)
+  "Hematodinium" = "#9c6e80",       # Crimson red (flagged parasitic)
   "Paraeuchaeta" = "#20B2AA",        # Light sea green (copepod, carnivore)
-  "unidentified" = "#7c8087"
+  "other Calanoida" = "#655882",
+  "unidentified Calanoida"= "#7688a6",
+  "Sphaeronectes" = "#d9256d"              # Turquoise / teal (new addition)
+  
 )
 
 
-# COI: AE Analysis --------------------------------------------------------
+# Figure S4: COI AE Analysis --------------------------------------------------------
 
-#Use all taxa
+#Use all taxa (no filter)
 # Load data
-all_amp_effs_coi <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_coi_all_sub_nofilt.csv")) %>%
-  mutate(Genus = str_extract(Lambda.coord, "[^_]+$"))
+all_amp_effs_coi_nofilt <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_coi_all_sub_nofilt.csv"), row.names = 1) %>%
+  mutate(Genus = str_extract(Lambda.coord, "[^_]+$"))%>% 
+  filter(Genus != "unidentified ")
+
 
 # Calculate mean Lambda per Genus and order them ascending
 ordered_taxa <- all_amp_effs_coi %>%
@@ -2845,14 +2976,13 @@ mean_s_columns_coi_genus <- function(df, genus, suffix) {
   }
 }
 
-all_amp_effs_coi_nofilt <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_coi_all_sub_nofilt.csv"), row.names = 1) %>%
-  mutate(Genus = str_extract(Lambda.coord, "[^_]+$"))
 
-
-
-fido_coi_s1_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s1_genus_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
-fido_coi_s2_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s2_genus_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
-fido_coi_s3_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s3_genus_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
+fido_coi_s1_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s1_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
+  rownames_to_column("Genus")
+fido_coi_s2_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s2_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
+  rownames_to_column("Genus")
+fido_coi_s3_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s3_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
+  rownames_to_column("Genus")
 
 
 # coi ---------------------------------------------------------------------
@@ -2913,6 +3043,18 @@ genus_order <- result_combined_nofilt %>%
   pull(Genus)
 
 
+# Summarize and set factor order
+summarized_result <- result_combined_nofilt %>%
+  group_by(Genus, SizeFraction) %>%
+  summarise(
+    Lambda.mean = mean(Lambda.mean, na.rm = TRUE),
+    Mean = mean(Mean, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(Genus = factor(Genus, levels = genus_order))%>%
+  mutate(Genus = factor(Genus, levels = names(taxa_colors_coi)))
+
+
 # Compute correlation stats per size fraction
 lm_stats_by_size <- summarized_result %>%
   filter(Mean > 0) %>%
@@ -2930,16 +3072,6 @@ lm_stats_by_size <- summarized_result %>%
     )
   )
 
-# Summarize and set factor order
-summarized_result <- result_combined_nofilt %>%
-  group_by(Genus, SizeFraction) %>%
-  summarise(
-    Lambda.mean = mean(Lambda.mean, na.rm = TRUE),
-    Mean = mean(Mean, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(Genus = factor(Genus, levels = genus_order))%>%
-  mutate(Genus = factor(Genus, levels = names(taxa_colors_coi)))
 
 # Correlation
 pearson_coi <- cor.test(~ Lambda.mean + Mean, data = summarized_result)
@@ -2956,7 +3088,7 @@ size_fraction_labels <- c(
 # Plot
 amp_effs_vs_rra_coi_nofilt <- summarized_result %>%
   # filter(Mean > 0) %>%
-  # filter(!is.na(cycle))
+  filter(!is.na(Genus)) %>% 
   ggplot(aes(x = Lambda.mean, y = log2(Mean))) +
   geom_point(
     aes(fill = Genus, shape = SizeFraction),
@@ -3016,7 +3148,7 @@ amp_effs_vs_rra_coi_nofilt <- summarized_result %>%
       ),
       title.position = "top",
       title.hjust = 0.5,
-      nrow = 4
+      nrow = 5
     )
   ) +
   facet_wrap(~SizeFraction, nrow = 1,
@@ -3026,7 +3158,7 @@ amp_effs_vs_rra_coi_nofilt
 
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/v0/figs_amp_effs_vs_rra_coi_nofilt.png"),
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
   plot = amp_effs_vs_rra_coi_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3035,7 +3167,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/v0/figs_amp_effs_vs_rra_coi_nofilt.png"),
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
   plot = amp_effs_vs_rra_coi_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3044,7 +3176,7 @@ ggsave(
 )
 
 
-#COmbine for figure 4
+#COmbine for figure S4
 library(patchwork)
 
 # Remove x-axis labels and ticks from the top plot
@@ -3073,7 +3205,7 @@ amp_effs_vs_rra_coi_nofilt <- amp_effs_vs_rra_coi_nofilt +
       ),
       title.position = "top",
       title.hjust = 0.5,
-      nrow = 4
+      nrow = 5
     )
   )
 
@@ -3088,7 +3220,7 @@ figure_scoi_combined
 
 # Save the combined figure
 ggsave(
-  filename = file.path(output_dir, "figure_scoi_combined.png"),
+  filename = file.path("PCR_bias_correction/figures/supporting_info/coi/figure_scoi_combined.png"),
   plot = figure_scoi_combined,
   dpi = 600,
   width = 7,
@@ -3097,8 +3229,8 @@ ggsave(
 )
 
 ggsave(
-  filename = file.path(output_dir, "figure_scoi_combined.pdf"),
-  plot = figure_s4_combined,
+  filename = file.path("PCR_bias_correction/figures/supporting_info/coi/figure_scoi_combined.pdf"),
+  plot = figure_scoi_combined,
   dpi = 600,
   width = 7,
   height = 8,
@@ -3106,217 +3238,101 @@ ggsave(
 )
 
 
+# Histogram of amplification efficiencies
 
-# COI: Zooscan Comparison -------------------------------------------------
-
-
-#Taxa file from pre-processed fido families for 18S
-coi_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv"))  %>% 
-  select(-X) %>% 
-  distinct() %>% 
-  filter(Family != "Cliidae") %>% 
-  column_to_rownames("Genus")
-
-
-
-#COI
-# Load files dynamically for s1, s2, and s3
-load_most_recent_file_coi <- function(suffix,primer) {
-  # Directory path
-  target_dir <- here("PCR_bias_correction/data/predicted_og")
-  
-  # List all files matching the pattern for the given suffix
-  files <- list.files(target_dir, 
-                      pattern = paste0("predicted_og_", primer, "_\\d{2}_\\d{2}_\\d{4}_", suffix, "\\_nofilt.csv"), 
-                      full.names = TRUE)
-  
-  
-  if (length(files) == 0) {
-    stop(paste("No files found for suffix:", suffix))
-  }
-  
-  # Extract dates from filenames
-  extract_date <- function(file) {
-    match <- regmatches(file, regexpr("\\d{2}_\\d{2}_\\d{4}", file))
-    as.Date(match, format = "%m_%d_%Y")
-  }
-  
-  # Find the most recent file
-  files_with_dates <- data.frame(
-    file = files,
-    date = sapply(files, extract_date)
-  )
-  
-  latest_file <- files_with_dates %>%
-    arrange(desc(date)) %>%
-    slice(1) %>%
-    pull(file)
-  
-  # Read the file and apply transformations
-  read.csv(latest_file) %>%
-    select(-X) %>%
-    mutate(coord = str_remove(coord, "^clr_"))
+# Freedman-Diaconis function
+bin_width_fd <- function(x) {
+  iqr <- IQR(x, na.rm = TRUE)
+  n <- sum(!is.na(x))
+  if (n <= 1 || iqr == 0) return(0.05)  # safe fallback
+  2 * iqr / (n^(1/3))
 }
 
+# Size fraction labels
+facet_labels <- c("0.2" = "0.2–0.5 mm", "0.5" = "0.5–1 mm", "1" = "1–2 mm")
 
-fido_s1_coi <- load_most_recent_file_coi("s1","coi")
-fido_s2_coi <- load_most_recent_file_coi("s2","coi")
-fido_s3_coi <- load_most_recent_file_coi("s3","coi")
+# Create histograms per size_fraction
+histograms <- lapply(unique(all_amp_effs_coi_nofilt$size_fraction), function(sf) {
+  df_sf <- all_amp_effs_coi_nofilt %>% filter(size_fraction == sf)
+  bw <- bin_width_fd(df_sf$Lambda.mean)
+  
+  ggplot(df_sf, aes(x = Lambda.mean)) +
+    geom_histogram(
+      bins=6,
+      fill = "gray60",
+      color = "black",
+      alpha = 0.9
+    ) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray30", linewidth = 0.8) +
+    labs(
+      x = "Amplification Efficiency (CLR slope)",
+      y = "Number of Taxa",
+      title = facet_labels[as.character(sf)]
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 9, face = "bold"),
+      axis.text = element_text(size = 8),
+      panel.grid.major = element_line(size = 0.4, color = "gray85"),
+      panel.grid.minor = element_blank()
+    )
+})
 
+# Combine plots in a row
+hist_amp_effs_faceted <- wrap_plots(histograms, nrow = 1)
 
-#Merge
-final_data_all_sizes_coi=rbind(fido_s1_coi,fido_s2_coi,fido_s3_coi) %>%
-  mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) 
+# View the combined figure
+hist_amp_effs_faceted
 
+ggsave(
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.png"),
+  plot = hist_amp_effs,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
 
-#Make final dataframe
-phy_taxa_pcr_coi= final_data_all_sizes_coi %>%
-  filter(cycle_num==0) %>% 
-  mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) %>%
-  left_join(.,env_metadata, by="Sample_ID")%>%
-  mutate(taxa = coord)
-
-#Filter to calanoida
-taxa_pcr_coi=phy_taxa_pcr_coi %>% mutate(Genus=taxa) %>%
-  left_join(.,zhan_taxa %>% rownames_to_column("Genus"), by="Genus") %>%
-  filter(Order=="Calanoida") 
-
-
-#PCR-RA df ready to join with RRA
-pcr_join_prop_coi=phy_taxa_pcr_coi %>%
-  mutate(Sample_ID=Sample_ID_dot) %>%
-  group_by(Sample_ID,size_fraction_numeric,PC1,cycle,taxa) %>%
-  summarise(n_reads_pcr=sum(n_reads),
-            p.2.5=min(p2.5),
-            p.97.5=max(p97.5))
-
-
-fido_s1_raw_coi=read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s1_genus_phy_all_subpools.csv")) %>% 
-  select(-starts_with("X")) %>% 
-  pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
-  mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
-  group_by(Sample_ID_short, Genus) %>%
-  summarise(n_reads = sum(n_reads)) %>%
-  filter(!grepl("All", Sample_ID_short)) %>% # Filter rows where Sample_ID_short doesn't contain "All"
-  pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
-
-
-
-fido_s2_raw_coi=read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s2_genus_phy_all_subpools.csv")) %>% 
-  select(-starts_with("X")) %>% 
-  pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
-  mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
-  group_by(Sample_ID_short, Genus) %>%
-  summarise(n_reads = sum(n_reads)) %>%
-  filter(!grepl("All", Sample_ID_short)) %>% # Filter rows where Sample_ID_short doesn't contain "All"
-  pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0) 
-
-
-fido_s3_raw_coi=read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s3_genus_phy_all_subpools.csv")) %>% 
-  select(-starts_with("X")) %>% 
-  pivot_longer(cols = -Genus, names_to = "Sample_ID", values_to = "n_reads") %>%
-  mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
-  group_by(Sample_ID_short, Genus) %>%
-  summarise(n_reads = sum(n_reads)) %>%
-  filter(!grepl("All", Sample_ID_short)) %>% # Filter rows where Sample_ID_short doesn't contain "All"
-  pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
+ggsave(
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
+  plot = hist_amp_effs,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
 
 
 
-
-merge(fido_s1_raw_coi, fido_s2_raw_coi, by = "Genus", all = TRUE) %>%
-  merge(.,fido_s3_raw_coi, by = "Genus", all = TRUE)%>%
-  column_to_rownames("Genus") %>%
-  mutate(across(.cols = everything(), .fns = ~ coalesce(., 0)))-> fido_coi_merged_raw
-
-
-
-#Metadata
-env_metadata_phy=env_metadata %>%
-  column_to_rownames("Sample_ID_dot")
-
-
-OTU = otu_table(as.matrix(fido_coi_merged_raw), taxa_are_rows = TRUE)
-TAX = tax_table(as.matrix(coi_taxa))
-meta=sample_data(env_metadata_phy)
-
-#Raw in counts
-phy_coi_raw_counts=phyloseq(OTU, TAX, meta) %>% 
-  phyloseq_transform_to_long(.) %>%
-  mutate(Genus=asv_code) %>% 
-  select(-asv_code)
-
-
-#Raw in Proportions
-phy_coi=transform_sample_counts(phyloseq(OTU, TAX, meta), function(x) x / sum(x))%>%
-  phyloseq_transform_to_long(.) %>%
-  mutate(Genus=asv_code) %>%
-  select(-asv_code)
-
-
-
-#Filter to calanoid copepods
+# Figure S10: COI Zooscan Comparison -------------------------------------------------
 taxa_sel="Calanoida"
-
-#2. Join with PCR Proportions
-#All taxa
-pcr_and_raw_coi_all=
-  phy_coi %>% 
-  mutate(taxa=Genus) %>% 
-  group_by(Sample_ID,taxa) %>%
-  summarise(n_reads_raw=sum(n_reads)) %>% 
-  left_join(pcr_join_prop_coi, by=c("Sample_ID","taxa"))
-
-#3. Join in counts
-phy_coi_raw_counts %>% 
-  filter(Order==taxa_sel) %>%
-  group_by(Sample_ID,size_fraction_numeric) %>%
-  summarise(n_reads_raw=sum(n_reads)) %>%  
-  left_join(pcr_join_prop_coi, by="Sample_ID") %>%
-  select(-size_fraction_numeric.x) %>%
-  rename(size_fraction_numeric=size_fraction_numeric.y)->pcr_and_raw_coi_counts
-
-#Add PCR-bias corrected counts
-counts_raw_all_coi=phy_coi_raw_counts %>% 
-  group_by(Sample_ID,size_fraction_numeric) %>%
-  summarise(n_reads_raw_sum=sum(n_reads)) %>% 
-  select(Sample_ID,size_fraction_numeric,n_reads_raw_sum)
-
-
-pcr_and_raw_coi_counts=pcr_and_raw_coi_counts %>% 
-  left_join(.,counts_raw_all_coi,by=c("Sample_ID","size_fraction_numeric")) %>% 
-  mutate(n_reads_pcr_counts=n_reads_pcr*n_reads_raw_sum)
-
-
-
-pcr_and_raw_coi_calanoids=pcr_and_raw_coi_all %>% 
-  mutate(Genus=taxa) %>% 
-  left_join(.,coi_taxa %>% rownames_to_column("Genus") %>% 
-              select(Genus, Order), by="Genus") %>% 
-  filter(Order==taxa_sel) %>% 
-  select(-taxa)%>% 
-  filter(Genus=="Calanus") %>%
-  group_by(Sample_ID,size_fraction_numeric,cycle) %>% 
-  summarise(n_reads_raw=sum(n_reads_raw), 
-            n_reads_pcr=sum(n_reads_pcr),
-            PC1=mean(PC1)) 
-
-#Add biomass sum, calanoid biomass and proportion of calanoid biomass
-taxa_sel="Calanoida"
-
 
 #Zooscan biomass proportion
 # All taxa
 zooscan_all=read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass_esd.csv"), row.names = 1)%>%
   # select(-X, acq_min_mesh) %>% 
   # mutate(Sample_ID=sample_id) %>%  
-  distinct(.)
+  distinct(.) %>% 
+  mutate(PC1=-1*PC1)
 
 
 #Calanoida
 zooscan_taxa=zooscan_all%>%
   filter(object_annotation_category==taxa_sel)  
 
+#SUbset metabrcoding to calanoids
+pcr_and_raw_coi_calanoids=pcr_and_raw_coi_all %>% 
+  mutate(Genus=taxa) %>% 
+  left_join(.,coi_taxa %>% rownames_to_column("Genus") %>% 
+              select(Genus, Order, Family), by="Genus") %>% 
+  filter(Family != "Eucalanidae") %>% 
+  select(-Genus,-taxa)%>% 
+  filter(Order==taxa_sel) %>%
+  group_by(Sample_ID,size_fraction_numeric,cycle) %>% 
+  summarise(n_reads_raw=sum(n_reads_raw), 
+            n_reads_pcr=sum(n_reads_pcr),
+            PC1=mean(PC1)) 
 
 
 #Propotions
@@ -3324,7 +3340,9 @@ pcr_raw_zoo_coi=zooscan_taxa %>%
   #remove XL size class
   filter(size_fraction != ">2") %>%
   left_join(pcr_and_raw_coi_calanoids, by=c("PC1","size_fraction_numeric")) %>% 
-  unique(.)
+  unique(.) %>% 
+  mutate(n_reads_raw_coi=n_reads_raw,
+         n_reads_pcr_coi=n_reads_pcr)
 
 
 
@@ -3379,35 +3397,23 @@ cor_results_grid <- pcr_raw_zoo_coi_long %>%
     r = map_dbl(cor_test, ~ .x$estimate),
     p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
     p_bonferroni = pmin(p_uncorrected * n_tests, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
     label = paste0(
-      "r = ", formatC(r, digits = 2, format = "f"), "\n",
-      "P = ", ifelse(p_bonferroni < 0.001, "<0.001", formatC(p_bonferroni, digits = 2, format = "f"))
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.001, "<0.001", formatC(p_bh, digits = 2, format = "f"))
     )
   )
-
-# Compute per-facet positions using quantiles
-label_positions <- pcr_raw_zoo_coi_long %>%
-  group_by(x_variable, y_variable, size_fraction) %>%
-  summarise(
-    x = quantile(log(x_value), 0.25, na.rm = TRUE),
-    y = quantile(asin(sqrt(y_value)), 0.75, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Merge with your correlation label table
-cor_results_grid_pos <- cor_results_grid %>%
-  left_join(label_positions, by = c("x_variable", "y_variable", "size_fraction"))
 
 
 # Create 6-row, 4-column facet grid plot
 zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_coi_long, 
-                          aes(x = log((x_value)), 
+                          aes(x = ((x_value)), 
                               y = asin(sqrt(y_value)))) +  # Apply asin sqrt transformation
   geom_point(aes(shape = cycle, size = 3, color = as.factor(size_fraction), fill = as.factor(size_fraction))) +
   scale_shape_manual(values = c("1" = 21, "2" = 22, "3"=24, "T1"=23, "T2"=25)) +
-  scale_fill_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), 
+  scale_fill_manual(values =  c( "#AEDFF7", "#B6E3B6", "#FFB3AB"),
                     labels = size_fraction_labels) +
-  scale_color_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), 
+  scale_color_manual(values =  c( "#AEDFF7", "#B6E3B6", "#FFB3AB"), 
                      labels = size_fraction_labels) +
   facet_grid(rows = vars(size_fraction, y_variable), cols = vars(x_variable), scales = "free") +  # 6x4 layout
   labs(
@@ -3417,28 +3423,50 @@ zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_coi_long,
     color = "Size Fraction"
   ) +
   geom_text(
-    data = cor_results_grid_pos,
-    aes(x = x, y = y, label = label),
+    data = cor_results_grid,
+    aes(label = label),
+    x = 0.5, y = 0.9,
     inherit.aes = FALSE,
     size = 3.8,
     fontface = "italic"
-  )+  # Pearson correlation
+  )  +  # Pearson correlation
   guides(size = FALSE, fill = FALSE) +
   theme_classic() +
   theme(
-    panel.grid.major = element_line(color = "gray80", size = 0.5),  # Major grid lines for readability
-    panel.grid.minor = element_line(color = "gray90", size = 0.2),  # Minor grid lines for subtle separation
-    panel.border = element_rect(color = "black", fill = NA, size = 1),  # Black border around each facet
-    strip.background = element_rect(fill = "lightgray", color = "black"),  # Light gray background for facet labels
-    strip.text = element_text(size = 16, face = "bold"),  # Larger and bold facet labels
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
-    axis.text.y = element_text(size = 14),
-    axis.title = element_text(size = 16)
-  )
+    panel.grid.major = element_line(color = "gray80", size = 0.5),
+    panel.grid.minor = element_line(color = "gray90", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif"))
+
 
 
 # Print plot
 zoo_vs_pcr_grid
+
+# Compile correlation results into a clean summary table
+cor_summary_table <- cor_results_grid %>%
+  select(size_fraction, y_variable, x_variable, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  rename(
+    `Molecular Metric` = y_variable,
+    `Size Fraction` = size_fraction,
+    `Zooscan Metric` = x_variable,
+    `Pearson R` = r,
+    `p (Uncorrected)` = p_uncorrected,
+    `p (BH)` = p_bh
+  ) %>%
+  arrange(`Molecular Metric`, `Zooscan Metric`, `Size Fraction`)
+
+# View the table
+print(cor_summary_table)
+
+# Optionally write to CSV
+write.csv(cor_summary_table, here("PCR_bias_correction/tables/correlation_summary_table_coi.csv"), row.names = FALSE)
 
 
 #Just Absolute biomass
@@ -3473,9 +3501,12 @@ cor_results <- pcr_vs_dryweight %>%
   mutate(
     r = map_dbl(cor_test, ~ .x$estimate),
     p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
-    p_bonferroni = pmin(p_uncorrected * n_tests, 1),  # Bonferroni correction
-    label = paste0("r = ", formatC(r, digits = 2, format = "f"), 
-                   "\nP = ", ifelse(p_bonferroni < 0.001, "<0.001", formatC(p_bonferroni, digits = 2, format = "f")))
+    p_bonferroni = pmin(p_uncorrected * n_tests, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
+    label = paste0(
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.001, "<0.001", formatC(p_bh, digits = 2, format = "f"))
+    )
   )
 
 #Define pastel color palette
@@ -3486,7 +3517,7 @@ ggplot(pcr_vs_dryweight,
        aes(x = log10(dryweight_C_mg_m2_taxa_mean),
            y = asin(sqrt(y_value)),
            fill = size_fraction)) +
-  geom_point(aes(shape = cycle), size = 6, stroke = 1.2, color = "black") +
+  geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
   scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
   scale_fill_manual(values = pastel_colors, labels = size_fraction_labels, name = "Size Fraction") +
   coord_cartesian(xlim = c(0, 3)) +
@@ -3500,9 +3531,9 @@ ggplot(pcr_vs_dryweight,
   geom_text(
     data = cor_results,
     aes(label = label),
-    x = 0.25, y = 0.5,
+    x = 2.5, y = 1.1,
     inherit.aes = FALSE,
-    size = 4, fontface = "italic"
+    size = 2.5, fontface = "italic"
   )  +
   guides(
     fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
@@ -3515,33 +3546,83 @@ ggplot(pcr_vs_dryweight,
     panel.grid.minor = element_line(color = "gray90", size = 0.2),
     panel.border = element_rect(color = "black", fill = NA, size = 1),
     strip.background = element_rect(fill = "lightgray", color = "black"),
-    strip.text = element_text(size = 16, face = "bold", genus = "serif"),
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 14, face = "bold", genus = "serif"),
-    axis.text.y = element_text(size = 14, face = "bold", genus = "serif"),
-    axis.title = element_text(size = 16, face = "bold", genus = "serif"),
-    legend.title = element_text(size = 16, face = "bold", genus = "serif"),
-    legend.text = element_text(size = 14, genus = "serif")
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif")
   )-> methods_correlation_plot
 
 methods_correlation_plot
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/calanoid_methods_compare_coi_scatter.png"),
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/coi_correlations.png"),
   plot = methods_correlation_plot,
   dpi = 600,
-  width = 12, # Adjust width (inches) based on journal requirements
-  height = 7, # Adjust height (inches) based on journal requirements
+  width =6, # Adjust width (inches) based on journal requirements
+  height = 3.5, # Adjust height (inches) based on journal requirements
   units = "in"
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/calanoid_methods_compare_coi_scatter.pdf"),
+  filename = here("PCR_bias_correction/figures/supporting_info/coi/coi_correlations.pdf"),
   plot = methods_correlation_plot,
   dpi = 600,
-  width = 12, # Adjust width (inches) based on journal requirements
-  height = 7, # Adjust height (inches) based on journal requirements
+  width = 6, # Adjust width (inches) based on journal requirements
+  height = 3.5, # Adjust height (inches) based on journal requirements
   units = "in"
 )
+
+
+
+# Combined Analysis Compare COI, 18S, Zooscan -------------------------------------------------------
+# Example: merge COI and 18S raw read tables
+
+coi_18s_zoo <- pcr_raw_zoo_18s %>% 
+  select(Sample_ID, PC1, size_fraction_numeric, n_reads_pcr_18s, n_reads_raw_18s) %>% 
+  left_join(pcr_raw_zoo_coi, by = c("Sample_ID", "PC1", "size_fraction_numeric"))
+
+# Pivot long for the three metrics: COI, 18S, and Zooscan biomass
+coi_18s_zoo_long <- coi_18s_zoo %>%
+  pivot_longer(
+    cols = c(biomass_prop_taxa, n_reads_raw_coi, n_reads_raw_18s),
+    names_to = "Method",
+    values_to = "Proportion"
+  )
+
+ggplot(coi_18s_zoo_long, aes(
+  x = as.factor(PC1),
+  y = Proportion,
+  fill = Method
+)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ size_fraction_numeric, nrow = 3, scales = "free_y") +
+  scale_fill_manual(
+    values = c(
+      "biomass_prop_taxa" = "#70BF41",
+      "n_reads_raw_coi" = "#4F86F7",
+      "n_reads_raw_18s" = "#F78D4F"
+    ),
+    labels = c("Zooscan Biomass", "18S Raw Reads", "COI Raw Reads")
+  ) +
+  labs(
+    y = "Proportion Reads or Biomass",
+    x = "PC1",
+    fill = "Method"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    axis.title = element_text(size = 8, face = "bold"),
+    strip.text = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 8),
+    legend.key.size = unit(1.5, "lines"),
+    legend.position = "right"
+  )
+
 
 
 # SCRAP -------------------------------------------------------------------
