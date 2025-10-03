@@ -34,3 +34,10 @@ drafts/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# Project artifacts excluded by request
+figures/
+drafts/
+scripts/Q4_taxa_environment_patterns/
+scripts/Q5_methods_comparison/
+scripts/simulations/
