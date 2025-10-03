@@ -1,0 +1,6 @@
+^scripts$
+^figures$
+^data$
+^\.github$
+^renv$
+^README\.Rmd$

@@ -1,0 +1,28 @@
+Package: ccePCRbias
+Title: PCR Bias Correction for Zooplankton eDNA Metabarcoding in the CCE
+Version: 0.1.0
+Authors@R: c(
+    person(given = "Dante", family = "Capone", role = c("aut", "cre"), email = "", comment = c(ORCID = ""))
+)
+Description: Analysis code and minimal inputs to quantify and correct PCR amplification bias in eDNA metabarcoding of zooplankton in the California Current Ecosystem, including calibration, simulations, and compositional modeling.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.1)
+Imports:
+    here,
+    tidyverse,
+    phyloseq,
+    fido,
+    microbiome,
+    ggplot2,
+    gridExtra,
+    ggdist,
+    vegan,
+    patchwork,
+    stringr,
+    readr
+Suggests:
+    devtools,
+    roxygen2
+Roxygen: list(markdown = TRUE)
