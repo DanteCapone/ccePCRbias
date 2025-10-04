@@ -41,3 +41,11 @@ drafts/
 scripts/Q4_taxa_environment_patterns/
 scripts/Q5_methods_comparison/
 scripts/simulations/
+
+# Exclude heavy taxonomy assignment refs
+scripts/pre-processing/taxanomic_assignation/
+# Common heavy formats in that folder
+scripts/pre-processing/taxanomic_assignation/*.fasta
+scripts/pre-processing/taxanomic_assignation/*.qza
+scripts/pre-processing/taxanomic_assignation/*.tsv
+scripts/pre-processing/taxanomic_assignation/*.txt
