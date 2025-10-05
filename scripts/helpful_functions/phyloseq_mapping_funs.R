@@ -1,4 +1,4 @@
-
+﻿
 map_asv_norm <- function(data_in,ranck) {
   # Load California map data
   worldmap <- map_data("world")

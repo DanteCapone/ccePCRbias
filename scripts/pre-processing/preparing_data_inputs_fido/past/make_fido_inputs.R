@@ -1,4 +1,4 @@
-# ,From these runs, we didn't get data from the 20C or various pools for COI runs, but it worked for 18s
+﻿# ,From these runs, we didn't get data from the 20C or various pools for COI runs, but it worked for 18s
 # ,try first with 18s
 
 library (tidyverse)

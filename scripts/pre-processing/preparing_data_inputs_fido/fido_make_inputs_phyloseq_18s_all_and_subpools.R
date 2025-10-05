@@ -1,4 +1,4 @@
-#Make inputs that inlcude all sub-pools and All pool for mutliple observartions of amp_eff
+﻿#Make inputs that inlcude all sub-pools and All pool for mutliple observartions of amp_eff
 library (tidyverse)
 library (here)
 library(ggpubr)
@@ -11,16 +11,16 @@ here()
 ###18S
 #Read in the OTU data
 #Run 1 (Non pooled data)
-asv18s_run1=read.csv(here("PCR_bias_correction/data/raw_reads/","ASV_table_18s_run1.csv")) %>%
+asv18s_run1=read.csv(here("data/raw_reads/","ASV_table_18s_run1.csv")) %>%
   select(-X) 
 #Run2
-asv18s_run2=read.csv(here("PCR_bias_correction/data/raw_reads/","ASV_table_18s_run2.csv")) %>%
+asv18s_run2=read.csv(here("data/raw_reads/","ASV_table_18s_run2.csv")) %>%
   select(-X)
 
 
 
 #Taxa Tables using new combined taxa file between BLAST and Metazoogene
-taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.csv")) %>% 
+taxa_18s=read.csv(here("data/taxa_files/blast_metazoo_18s.csv")) %>% 
   select(-X) %>% 
   mutate(non_na_count = rowSums(!is.na(select(., -Hash)))) %>%
   group_by(Hash) %>%
@@ -128,7 +128,7 @@ tax18s_s3=  tax_table(as.matrix(tax18s_s3))
 
 
 #Metadata
-meta18s=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv")) %>%
+meta18s=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv")) %>%
   dplyr::select(-c("X")) %>%
   column_to_rownames("Sample_ID_dot") %>%
   select(-c(Sizefractionmm,offshore_onshore,clust_group,PC1,cycle, max_size)) %>%
@@ -290,7 +290,7 @@ tax18s_family=rbind(fido_18s_s1_family_taxa,fido_18s_s2_family_taxa,fido_18s_s3_
   #Additionally filter out reclassified Corycaeidae (actually a poecilistomatoida)
   filter(!(Family == "Corycaeidae" & Order =="Cyclopoida")) 
   
-write.csv(tax18s_family,here("PCR_bias_correction/data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))
+write.csv(tax18s_family,here("data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))
 
 
 
@@ -451,7 +451,7 @@ fido_18s_s1_save_family_phy <- fido_18s_s1_final %>%
   
   
   #Save
-  write.csv(fido_18s_s1_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"))
+  write.csv(fido_18s_s1_save_family_phy,here("data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"))
 
 # Remove "unidentified Collodaria"
 
@@ -469,7 +469,7 @@ fido_18s_s1_save_family_phy_nocollo= fido_18s_s1_save_family_phy %>%
 
 # Save cleaned dataset
 write.csv(fido_18s_s1_save_family_phy_nocollo, 
-          here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools_nocollodaria.csv"), 
+          here("data/fido/phy/fido_18s_s1_family_phy_all_subpools_nocollodaria.csv"), 
           row.names = FALSE)
 
 
@@ -552,7 +552,7 @@ fido_18s_s2_final %>%
   summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s2_save_family_phy
 
 #Save
-write.csv(fido_18s_s2_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"))
+write.csv(fido_18s_s2_save_family_phy,here("data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"))
 
 fido_18s_s2_save_family_phy%>% 
   pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
@@ -575,7 +575,7 @@ fido_18s_s2_save_family_phy_nocollo <- fido_18s_s2_save_family_phy %>%
 
 # Save cleaned dataset
 write.csv(fido_18s_s2_save_family_phy_nocollo, 
-          here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools_nocollodaria.csv"), 
+          here("data/fido/phy/fido_18s_s2_family_phy_all_subpools_nocollodaria.csv"), 
           row.names = FALSE)
 
 
@@ -686,7 +686,7 @@ fido_18s_s3_final %>%
   summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s3_save_family_phy
 
 #Save
-write.csv(fido_18s_s3_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"))
+write.csv(fido_18s_s3_save_family_phy,here("data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"))
 
 fido_18s_s3_save_family_phy%>% 
   pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
@@ -711,7 +711,7 @@ fido_18s_s3_save_family_phy_nocollo <- fido_18s_s3_save_family_phy %>%
 
 # Save cleaned dataset
 write.csv(fido_18s_s3_save_family_phy_nocollo, 
-          here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools_nocollodaria.csv"), 
+          here("data/fido/phy/fido_18s_s3_family_phy_all_subpools_nocollodaria.csv"), 
           row.names = FALSE)
 
 #Visualize
@@ -794,7 +794,7 @@ final_plot1 <- p1 / p2 / p3  # Stitches them vertically with their own x-axes
 
 final_plot1
 # Save first plot
-save_path1 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/PCR_bias_correction/figures/miscellaneous/calibration_experiment_taxa_proportions_18s_all_samples")
+save_path1 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/figures/miscellaneous/calibration_experiment_taxa_proportions_18s_all_samples")
 ggsave(filename = paste0(save_path1, ".pdf"), plot = final_plot1, width = 14, height = 12, dpi = 300)
 ggsave(filename = paste0(save_path1, ".png"), plot = final_plot1, width = 14, height = 12, dpi = 300)
 
@@ -835,7 +835,7 @@ p2 <- ggplot(plot_data_filtered, aes(x = Category, y = prop, fill = Family)) +
 p2
 
 # Save second plot
-save_path2 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/PCR_bias_correction/figures/miscellaneous/calibration_experiment_taxa_proportions_18s")
+save_path2 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/figures/miscellaneous/calibration_experiment_taxa_proportions_18s")
 ggsave(filename = paste0(save_path2, ".pdf"), plot = p2, width = 14, height = 10, dpi = 300)
 ggsave(filename = paste0(save_path2, ".png"), plot = p2, width = 14, height = 10, dpi = 300)
 
@@ -978,6 +978,6 @@ ggplot(plot_data, aes(x = percent_set, y = prop, fill = Family)) +
 # final_plot3
 # 
 # # Save first plot
-# save_path3 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/PCR_bias_correction/figures/miscellaneous/calibration_experiment_taxa_proportions_18s_salpidae")
+# save_path3 <- here("C:/Users/Dante Capone/OneDrive/Desktop/Scripps_PhD/CCE_Zooplankton_Metabarcoding_Pub/figures/miscellaneous/calibration_experiment_taxa_proportions_18s_salpidae")
 # ggsave(filename = paste0(save_path3, ".pdf"), plot = final_plot3, width = 14, height = 12, dpi = 300)
 # ggsave(filename = paste0(save_path3, ".png"), plot = final_plot3, width = 14, height = 12, dpi = 300)

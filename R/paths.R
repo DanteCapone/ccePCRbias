@@ -1,4 +1,4 @@
-#' Path to packaged extdata
+﻿#' Path to packaged extdata
 #' @param ... Path components within inst/extdata
 #' @return A file path to an extdata resource
 #' @export

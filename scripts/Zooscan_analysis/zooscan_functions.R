@@ -1,4 +1,4 @@
-#Zooscan functions for CCE Metabarcoding Paper
+﻿#Zooscan functions for CCE Metabarcoding Paper
 
 #Load required Libraries
 librarian::shelf(tidyverse, stringr,here, RColorBrewer)
@@ -340,9 +340,9 @@ hydrozoans_tl<- function(ESD) {
 
 
 #References
-# Cornils, A. et al. (2022) ‘Testing the usefulness of optical data for zooplankton long-term monitoring: Taxonomic composition, abundance, biomass, and size spectra from ZooScan image analysis’, 
-# Limnology and Oceanography: Methods, 20(7), pp. 428–450. Available at: https://doi.org/10.1002/lom3.10495.
+# Cornils, A. et al. (2022) â€˜Testing the usefulness of optical data for zooplankton long-term monitoring: Taxonomic composition, abundance, biomass, and size spectra from ZooScan image analysisâ€™, 
+# Limnology and Oceanography: Methods, 20(7), pp. 428â€“450. Available at: https://doi.org/10.1002/lom3.10495.
 
-# Lavaniegos, B.E. and Ohman, M.D. (2007) ‘Coherence of long-term variations of zooplankton in two sectors of the California Current System’, 
-# Progress in Oceanography, 75(1), pp. 42–69. Available at: https://doi.org/10.1016/j.pocean.2007.07.002.
+# Lavaniegos, B.E. and Ohman, M.D. (2007) â€˜Coherence of long-term variations of zooplankton in two sectors of the California Current Systemâ€™, 
+# Progress in Oceanography, 75(1), pp. 42â€“69. Available at: https://doi.org/10.1016/j.pocean.2007.07.002.
 

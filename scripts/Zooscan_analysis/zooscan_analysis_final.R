@@ -1,14 +1,14 @@
-#Zooscan analysis final
+﻿#Zooscan analysis final
 librarian::shelf(tidyverse, googledrive, stringr,here,vegan,ggpubr, patchwork)
 here()
-source(here("PCR_bias_correction/scripts/Zooscan_analysis/zooscan_functions.R"))
-source("PCR_bias_correction/scripts/helpful_functions/general_helper_functions.R")
+source(here("scripts/Zooscan_analysis/zooscan_functions.R"))
+source("scripts/helpful_functions/general_helper_functions.R")
 
 
 #Load in the data
 
 ##Lat and lon are funky so add back in from metadata
-metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env_metadata_impute_phyloseq_6.2.2023_for_map.csv"))%>%
+metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.2.2023_for_map.csv"))%>%
   mutate(sample_id = tolower(str_replace_all(Sample_ID_short, "-", "_"))) %>%
   # Standardize key columns (some samples are incorerctly notated to compare with Zooscan)
   mutate(sample_id = tolower(str_replace_all(Sample_ID_short, "-", "_")))%>%
@@ -28,7 +28,7 @@ metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env
 
 
 # List all .tsv files in the folder
-tsv_files <- list.files(here("PCR_bias_correction/data/Zooscan/"), pattern = "\\.tsv$", full.names = TRUE)
+tsv_files <- list.files(here("data/Zooscan/"), pattern = "\\.tsv$", full.names = TRUE)
 
 # Find the most recently added file
 latest_ecotaxa <- tsv_files[which.max(file.info(tsv_files)$ctime)]
@@ -95,7 +95,7 @@ zooscan_combined <- zooscan_processed %>%
   fill(Sample_ID_short, .direction="downup") 
 
 #Save
-write.csv(zooscan_combined,here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass.csv"))
+write.csv(zooscan_combined,here("data/Zooscan/zooscan_by_sample_biomass.csv"))
 
 # PC1 Labels
 labels_for_PC1 <- metadata %>% 
@@ -203,7 +203,7 @@ abundance_plot_save <- wrap_plots(
 abundance_plot_save
 
 # Define output directory
-output_dir <- "PCR_bias_correction/figures/zooscan"
+output_dir <- "figures/zooscan"
 
 # Save as PNG
 ggsave(
@@ -279,8 +279,8 @@ zoop_calanoid_by_sample_relative_abundance = relative_abundances_map %>%
   filter(object_annotation_category=="Calanoida")
 
 #Save Biomass and relative abundances
-write.csv(zoop_calanoid_by_sample,here("PCR_bias_correction/data/Zooscan/zoop_calanoid_by_sample_biomass.csv"))
-write.csv(relative_abundances_map,here("PCR_bias_correction/data/Zooscan/zoop_relative_abundance.csv"))
+write.csv(zoop_calanoid_by_sample,here("data/Zooscan/zoop_calanoid_by_sample_biomass.csv"))
+write.csv(relative_abundances_map,here("data/Zooscan/zoop_relative_abundance.csv"))
 
 
 
@@ -295,7 +295,7 @@ zoop_calanoid_by_sample %>%
   labs(
     title = "Dry Weight by Cycle and Size Fraction",
     x = "Cycle",
-    y = "Dry Weight (mg/m²)"
+    y = "Dry Weight (mg/mÂ²)"
   ) +
   theme_minimal()
 
@@ -521,8 +521,8 @@ zoop_euphausiid_by_sample_relative_abundance = relative_abundances_map %>%
   filter(object_annotation_category=="Euphausiacea")
 
 #Save Biomass and relative abundances
-write.csv(zoop_euphausiid_by_sample,here("PCR_bias_correction/data/Zooscan/zoop_euphausiid_by_sample_biomass.csv"))
-write.csv(zoop_euphausiid_by_sample_relative_abundance,here("PCR_bias_correction/data/Zooscan/zoop_euphausiid_by_sample_relative_abundance.csv"))
+write.csv(zoop_euphausiid_by_sample,here("data/Zooscan/zoop_euphausiid_by_sample_biomass.csv"))
+write.csv(zoop_euphausiid_by_sample_relative_abundance,here("data/Zooscan/zoop_euphausiid_by_sample_relative_abundance.csv"))
 
 
 
@@ -538,8 +538,8 @@ zoop_euphausiid_by_sample_relative_abundance = relative_abundances_map %>%
   filter(object_annotation_category=="Euphausiacea")
 
 #Save Biomass and relative abundances
-write.csv(zoop_euphausiid_by_sample,here("PCR_bias_correction/data/Zooscan/zoop_euphausiid_by_sample_biomass.csv"))
-write.csv(zoop_euphausiid_by_sample_relative_abundance,here("PCR_bias_correction/data/Zooscan/zoop_euphausiid_by_sample_relative_abundance.csv"))
+write.csv(zoop_euphausiid_by_sample,here("data/Zooscan/zoop_euphausiid_by_sample_biomass.csv"))
+write.csv(zoop_euphausiid_by_sample_relative_abundance,here("data/Zooscan/zoop_euphausiid_by_sample_relative_abundance.csv"))
 
 
 

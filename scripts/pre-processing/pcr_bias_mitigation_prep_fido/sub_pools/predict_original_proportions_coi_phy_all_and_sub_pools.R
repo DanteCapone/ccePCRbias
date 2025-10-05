@@ -1,4 +1,4 @@
-#Make inputs that inlcude all sub-pools and All pool for mutliple observartions of amp_eff
+﻿#Make inputs that inlcude all sub-pools and All pool for mutliple observartions of amp_eff
 library (tidyverse)
 library (here)
 library(ggpubr)

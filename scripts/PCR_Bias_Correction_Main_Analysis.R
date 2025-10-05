@@ -1,26 +1,25 @@
-#Analysis Script for PCR Bias Correction Paper
-
-
+﻿#Analysis Script for PCR Bias Correction Paper
 
 # Read in the Data --------------------------------------------------------
 
 # Packages and Functions --------------------------------------------------
-librarian::shelf(tidyverse, googledrive, stringr,here,phyloseq,
+    8â†’librarian::shelf(tidyverse, googledrive, stringr,here,phyloseq,
                  extrafont, RColorBrewer, fido, compositions, ggpubr, patchwork, colorspace,
                  purrr, broom)
 
 #Add functions for myself
-source(("PCR_bias_correction/scripts/helpful_functions/treemap_funs_Capone.R"))
-source("PCR_bias_correction/scripts/helpful_functions/phyloseq_mapping_funs.R")
-source("PCR_bias_correction/scripts/helpful_functions/general_helper_functions.R")
+source(here("scripts/helpful_functions/treemap_funs_Capone.R"))
+source(here("scripts/helpful_functions/phyloseq_mapping_funs.R"))
+source(here("scripts/helpful_functions/general_helper_functions.R"))
 
 saving=0
 
 
 # Load in the data -----------------------------------------------------
+{{ ... }}
 
 #Metadata
-metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv"))%>%
+metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv"))%>%
   select(-X, -Sizefractionmm,max_size) %>%
   mutate(Sample_ID=Sample_ID_dot) %>%
   distinct(.) %>%
@@ -28,16 +27,16 @@ metadata=read.csv(here("PCR_bias_correction/data/physical_environmental_data/env
   mutate(PC1=PC1*-1)
 
 #Add depths df
-depths=read.csv(here("PCR_bias_correction/data/physical_environmental_data/sample_depths.csv")) %>%
+depths=read.csv(here("data/physical_environmental_data/sample_depths.csv")) %>%
   select(-X) %>%
   mutate(Sample_ID_short=Sample_ID)
 
 
 #Volume filtered (add to metadata)
-volume_filtered=read.csv(here("PCR_bias_correction/data/raw_data/biomass/p2107_bt_volume_filtered.csv"))
+volume_filtered=read.csv(here("data/raw_data/biomass/p2107_bt_volume_filtered.csv"))
 
 #Dryweights
-dryweights=read.csv("PCR_bias_correction/data/raw_data/biomass/dryweights_forzoopmetab.csv") %>%
+dryweights=read.csv("data/raw_data/biomass/dryweights_forzoopmetab.csv") %>%
   mutate(biomass_dry=8/3*biomass_dry) %>% 
   left_join(.,volume_filtered, by = c("Sample_ID_short"))%>% 
   left_join(.,depths, by="Sample_ID_short") %>%
@@ -64,7 +63,7 @@ env_metadata=metadata %>%
 #Using family
 
 #Taxa file from pre-processed fido families for 18S
-zhan_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))  %>% 
+zhan_taxa=read.csv(here("data/phyloseq_bio_data/18S/fido_18s_family_tax_table.csv"))  %>% 
   select(-X) %>% 
   distinct() %>% 
   column_to_rownames("Family")
@@ -76,7 +75,7 @@ zhan_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/18S/fido_18s
 # Function to dynamically load the most recent file based on the naming pattern
 load_most_recent_file <- function(suffix,primer) {
   # Directory path
-  target_dir <- here("PCR_bias_correction/data/predicted_og")
+  target_dir <- here("data/predicted_og")
   
   # List all files matching the pattern for the given suffix
   files <- list.files(target_dir, 
@@ -178,8 +177,8 @@ taxa_colors_18s <- c(
 
 
 # 18S ---------------------------------------------------------------------
-fido_s1_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools_nocollodaria.csv")) %>%
-# fido_s1_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools_nofilt.csv")) %>% 
+fido_s1_raw=read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools_nocollodaria.csv")) %>%
+# fido_s1_raw=read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools_nofilt.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Family, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -188,8 +187,8 @@ fido_s1_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_
   filter(!grepl("All", Sample_ID_short)) %>% # Filter rows where Sample_ID_short doesn't contain "All"
   pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0)
 
-fido_s2_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools_nocollodaria.csv")) %>%
-# fido_s2_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools_nofilt.csv")) %>% 
+fido_s2_raw=read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools_nocollodaria.csv")) %>%
+# fido_s2_raw=read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools_nofilt.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Family, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -198,8 +197,8 @@ fido_s2_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_
   filter(!grepl("All", Sample_ID_short)) %>% # Filter rows where Sample_ID_short doesn't contain "All"
   pivot_wider(names_from = Sample_ID_short, values_from = n_reads, values_fill = 0) 
 
-fido_s3_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools_nocollodaria.csv")) %>%
-# fido_s3_raw=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools_nofilt.csv")) %>% 
+fido_s3_raw=read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools_nocollodaria.csv")) %>%
+# fido_s3_raw=read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools_nofilt.csv")) %>% 
   select(-starts_with("X")) %>% 
   pivot_longer(cols = -Family, names_to = "Sample_ID", values_to = "n_reads") %>%
   mutate(Sample_ID_short= str_extract(Sample_ID, ".*(?=\\.[^.]+$)")) %>%
@@ -411,9 +410,9 @@ fig1 <- ggplot(plot_data_18s, aes(x = as.factor(PC1), y = Proportion, fill = tax
   ) +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, size = 8),         # ~6–8 pt
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 8),         # ~6â€“8 pt
     axis.text.y = element_text(size = 8),
-    axis.title.x = element_text(size = 8, face = "bold"),                # ~8–9 pt
+    axis.title.x = element_text(size = 8, face = "bold"),                # ~8â€“9 pt
     axis.title.y = element_text(size = 8, face = "bold"),
     strip.text = element_text(size = 8, face = "bold"),
     legend.text = element_text(size = 8),
@@ -425,7 +424,7 @@ fig1 <- ggplot(plot_data_18s, aes(x = as.factor(PC1), y = Proportion, fill = tax
 fig1
 
 # Define output directory
-output_dir <- "PCR_bias_correction/figures/v0"
+output_dir <- "figures/v0"
 
 # Save the plot as PNG
 ggsave(
@@ -493,7 +492,7 @@ ggsave(
 # fig1_order
 # 
 # # Define output directory
-# output_dir <- "PCR_bias_correction/figures/v0"
+# output_dir <- "figures/v0"
 # 
 # # Save the plot as PNG
 # ggsave(
@@ -520,7 +519,7 @@ ggsave(
 # Q2. Taxa Effects of PCR Bias --------------------------------------------
 #Use all taxa
 # Load data
-all_amp_effs_18s <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_18s_all_sub_nofilt.csv")) %>%
+all_amp_effs_18s <- read.csv(here("data/amp_effs/all_amp_effs_18s_all_sub_nofilt.csv")) %>%
   mutate(Family = str_extract(Lambda.coord, "[^_]+$"))
 
 # Calculate mean Lambda per Family and order them ascending
@@ -611,7 +610,7 @@ amp_effs_all_and_subpools_by_taxa_18s_no_filt
 
 
 # Save the plot as PNG
-output_dir <- "PCR_bias_correction/figures/supporting_info/"
+output_dir <- "figures/supporting_info/"
 ggsave(
   filename = file.path(output_dir, "figure_s4_aes_nofilt.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s_no_filt,
@@ -655,14 +654,14 @@ mean_s_columns_18s_family <- function(df, family, suffix) {
   }
 }
 
-all_amp_effs_18s_nofilt <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_18s_all_sub_nofilt.csv")) %>%
+all_amp_effs_18s_nofilt <- read.csv(here("data/amp_effs/all_amp_effs_18s_all_sub_nofilt.csv")) %>%
   mutate(Family = str_extract(Lambda.coord, "[^_]+$"))
 
 
 
-fido_18s_s1_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE)
-fido_18s_s2_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE)
-fido_18s_s3_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE)
+fido_18s_s1_nofilt = read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE)
+fido_18s_s2_nofilt = read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE)
+fido_18s_s3_nofilt = read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE)
 
 
 # 18s ---------------------------------------------------------------------
@@ -742,9 +741,9 @@ cat("p-value:", pearson_18s$p.value, "\n\n")
 
 
 size_fraction_labels <- c(
-  "S1" = "0.2–0.5 mm",
-  "S2" = "0.5–1 mm",
-  "S3" = "1–2 mm"
+  "S1" = "0.2â€“0.5 mm",
+  "S2" = "0.5â€“1 mm",
+  "S3" = "1â€“2 mm"
 )
 
 # Plot
@@ -819,7 +818,7 @@ amp_effs_vs_rra_18s_nofilt
 
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/v0/fig3b_amp_effs_vs_rra_18s_nofilt.png"),
+  filename = here("figures/v0/fig3b_amp_effs_vs_rra_18s_nofilt.png"),
   plot = amp_effs_vs_rra_18s_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -828,7 +827,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/v0/amp_effs_vs_rra_18s_nofilt.pdf"),
+  filename = here("figures/v0/amp_effs_vs_rra_18s_nofilt.pdf"),
   plot = amp_effs_vs_rra_18s_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -919,7 +918,7 @@ taxa_sel="Calanoida"
 
 #Zooscan biomass proportion
 # All taxa
-zooscan_all=read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass_esd.csv"), row.names = 1)%>%
+zooscan_all=read.csv(here("data/Zooscan/zooscan_by_sample_biomass_esd.csv"), row.names = 1)%>%
   # select(-X, acq_min_mesh) %>% 
   # mutate(Sample_ID=sample_id) %>%  
   distinct(.) %>% 
@@ -966,9 +965,9 @@ pcr_raw_zoo_18s=zooscan_taxa %>%
 
 facet_x_labels <- c(
   "biomass_prop_taxa" = "Log10(Biomass Proportion)",
-  "dryweight_C_mg_m2_taxa_mean" = "Log10 (Dry Weight (mg Cm²))",
+  "dryweight_C_mg_m2_taxa_mean" = "Log10 (Dry Weight (mg CmÂ²))",
   "relative_abundance" = "Log10(Relative Abundance)",
-  "abundance_m2_mean" = "Log10(Abundance (m²))"
+  "abundance_m2_mean" = "Log10(Abundance (mÂ²))"
 )
 
 facet_y_labels <- c(
@@ -1170,7 +1169,7 @@ ggplot(pcr_vs_dryweight,
 methods_correlation_plot
   #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/v0/figure_5_v0.png"),
+  filename = here("figures/v0/figure_5_v0.png"),
   plot = methods_correlation_plot,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -1179,7 +1178,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/v0/figure_5_v0.pdf"),
+  filename = here("figures/v0/figure_5_v0.pdf"),
   plot = methods_correlation_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -1239,7 +1238,7 @@ ggplot(pcr_raw_zoo_18s_long, aes(x = as.factor(PC1), fill = Method)) +
 grouped_bar_all_18s
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/calanoid_methods_compare_18s.png"),
+  filename = here("figures/supporting_info/calanoid_methods_compare_18s.png"),
   plot = grouped_bar_all_18s,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -1248,7 +1247,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/calanoid_methods_compare_18s.pdf"),
+  filename = here("figures/supporting_info/calanoid_methods_compare_18s.pdf"),
   plot = grouped_bar_all_18s,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -1329,7 +1328,7 @@ ggplot(pcr_raw_zoo_18s_mse, aes(x = as.factor(PC1), y = difference, fill = color
 mse_plot
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/mse_plot_methods_compare_18s.png"),
+  filename = here("figures/supporting_info/mse_plot_methods_compare_18s.png"),
   plot = mse_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -1338,7 +1337,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/mse_plot_methods_compare_18s.pdf"),
+  filename = here("figures/supporting_info/mse_plot_methods_compare_18s.pdf"),
   plot = mse_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -1366,7 +1365,7 @@ figure_s5_combined
 
 # Save the combined figure
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/figure_s5_combined.png"),
+  filename = here("figures/supporting_info/figure_s5_combined.png"),
   plot = figure_s5_combined,
   dpi = 600,
   width = 7,
@@ -1375,7 +1374,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/figure_s5_combined.pdf"),
+  filename = here("figures/supporting_info/figure_s5_combined.pdf"),
   plot = figure_s5_combined,
   dpi = 600,
   width = 7,
@@ -1413,7 +1412,7 @@ pcr_raw_zoo_18s %>%
 
 #Figure S
 # Load data
-all_amp_effs_18s <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_18s_all_sub.csv")) %>%
+all_amp_effs_18s <- read.csv(here("data/amp_effs/all_amp_effs_18s_all_sub.csv")) %>%
   mutate(Family = str_extract(Lambda.coord, "[^_]+$"))
 
 # Calculate mean Lambda per Family and order them ascending
@@ -1502,7 +1501,7 @@ amp_effs_all_and_subpools_by_taxa_18s
 
 
 # Save the plot as PNG
-output_dir <- "PCR_bias_correction/figures/v0"
+output_dir <- "figures/v0"
 ggsave(
   filename = file.path(output_dir, "amp_effs_18s.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s,
@@ -1523,9 +1522,9 @@ ggsave(
 )
 
 
-fido_18s_s1 = read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
-fido_18s_s2 = read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
-fido_18s_s3 = read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
+fido_18s_s1 = read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
+fido_18s_s2 = read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
+fido_18s_s3 = read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"), header = TRUE, check.names = FALSE)
 
 
 
@@ -1630,7 +1629,7 @@ amp_effs_vs_rra_18s
 
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/amp_effs_vs_rra_18s_nocollodaria.png"),
+  filename = here("figures/methods_comparison/amp_effs_vs_rra_18s_nocollodaria.png"),
   plot = amp_effs_vs_rra_18s,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -1639,7 +1638,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/methods_comparison/amp_effs_vs_rra_18s_nocollodaria.pdf"),
+  filename = here("figures/methods_comparison/amp_effs_vs_rra_18s_nocollodaria.pdf"),
   plot = amp_effs_vs_rra_18s,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -1654,7 +1653,7 @@ ggsave(
 # #Figure S5 ASV Level ----------------------------------------------------
 
 #Taxa file for matching Hash
-taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.csv")) %>% 
+taxa_18s=read.csv(here("data/taxa_files/blast_metazoo_18s.csv")) %>% 
   select(-X) %>% 
   mutate(non_na_count = rowSums(!is.na(select(., -Hash)))) %>%
   group_by(Hash) %>%
@@ -1676,7 +1675,7 @@ taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.cs
 
 
 # Load and merge amplification efficiency data
-all_amp_effs_18s_asv <- read.csv(here("PCR_bias_correction/data/amp_effs/amp_effs_18s_asv.csv"), row.names = 1) %>%
+all_amp_effs_18s_asv <- read.csv(here("data/amp_effs/amp_effs_18s_asv.csv"), row.names = 1) %>%
   mutate(Hash = str_extract(Lambda.coord, "[^_]+$")) %>%
   left_join(taxa_18s %>% select(Hash, Species), by = "Hash") %>%
   mutate(Species = replace_na(Species, "other"),
@@ -1792,7 +1791,7 @@ amp_effs_all_and_subpools_by_taxa_18s_asv
 
 
 # Save the plot as PNG
-output_dir <- "PCR_bias_correction/figures/supporting_info/"
+output_dir <- "figures/supporting_info/"
 ggsave(
   filename = file.path(output_dir, "figure_s4_aes_asv.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s_asv,
@@ -1814,7 +1813,7 @@ ggsave(
 
 # Loosened Filtering Criteria ASV---------------------------------------------
 #Taxa file for matching Hash
-taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.csv")) %>% 
+taxa_18s=read.csv(here("data/taxa_files/blast_metazoo_18s.csv")) %>% 
   select(-X) %>% 
   mutate(non_na_count = rowSums(!is.na(select(., -Hash)))) %>%
   group_by(Hash) %>%
@@ -1836,7 +1835,7 @@ taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.cs
 
 
 # Load and merge amplification efficiency data
-all_amp_effs_18s_asv_nofilt <- read.csv(here("PCR_bias_correction/data/amp_effs/amp_effs_18s_asv_nofilt.csv"), row.names = 1) %>%
+all_amp_effs_18s_asv_nofilt <- read.csv(here("data/amp_effs/amp_effs_18s_asv_nofilt.csv"), row.names = 1) %>%
   mutate(Hash = str_extract(Lambda.coord, "[^_]+$")) %>%
   left_join(taxa_18s %>% select(Hash, Family,Order), by = "Hash") %>% 
   mutate(Family = ifelse(Family == "" & Order == "Calanoida", "unidentified Calanoida", Family))%>% 
@@ -1984,7 +1983,7 @@ amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt
 
 
 # Save the plot as PNG
-output_dir <- "PCR_bias_correction/figures/supporting_info/"
+output_dir <- "figures/supporting_info/"
 ggsave(
   filename = file.path(output_dir, "figure_s4_aes_asv_nofilt.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt,
@@ -2056,9 +2055,9 @@ ggplot(all_amp_effs_18s_asv_nofilt, aes(x = Species, y = Lambda.mean,
 # AE vs Reads for ASVs ----------------------------------------------------
 
 
-fido_18s_s1 = read.csv(here("PCR_bias_correction/data/fido/asv_level/fido_18s_s1_asv_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1)
-fido_18s_s2 = read.csv(here("PCR_bias_correction/data/fido/asv_level/fido_18s_s2_asv_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1)
-fido_18s_s3 = read.csv(here("PCR_bias_correction/data/fido/asv_level/fido_18s_s3_asv_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1)
+fido_18s_s1 = read.csv(here("data/fido/asv_level/fido_18s_s1_asv_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1)
+fido_18s_s2 = read.csv(here("data/fido/asv_level/fido_18s_s2_asv_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1)
+fido_18s_s3 = read.csv(here("data/fido/asv_level/fido_18s_s3_asv_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1)
 
 
 # Function to sum columns in fido datasets containing "S1", "S2", or "S3" in their names
@@ -2139,7 +2138,7 @@ filtered_data <- summarized_result %>% filter(Mean > 0) %>%
   mutate(Order = replace_na(Order, "unidentified Order"))  %>%
   mutate(Order = factor(Order, levels = names(taxa_colors_18s_order)))
 
-# Fit linear models by SizeFraction and extract R² and p-value
+# Fit linear models by SizeFraction and extract RÂ² and p-value
 lm_stats_by_size <- filtered_data %>%
   group_by(SizeFraction) %>%
   nest() %>%
@@ -2153,7 +2152,7 @@ lm_stats_by_size <- filtered_data %>%
 # Format the text for annotation
 lm_stats_by_size <- lm_stats_by_size %>%
   mutate(
-    annotation = paste0("R² = ", round(r.squared, 2), 
+    annotation = paste0("RÂ² = ", round(r.squared, 2), 
                         "\nP = ", format.pval(p.value, digits = 2, eps = 0.001))
   )
 
@@ -2238,7 +2237,7 @@ amp_effs_vs_rra_18s_asv <- filtered_data %>%
 
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/figures_amp_effs_vs_rra_18s_asv.png"),
+  filename = here("figures/supporting_info/figures_amp_effs_vs_rra_18s_asv.png"),
   plot = amp_effs_vs_rra_18s_asv,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -2247,7 +2246,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/figures_amp_effs_vs_rra_18s_nocollodaria.pdf"),
+  filename = here("figures/supporting_info/figures_amp_effs_vs_rra_18s_nocollodaria.pdf"),
   plot = amp_effs_vs_rra_18s_asv,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -2267,7 +2266,7 @@ bin_width_fd <- function(x) {
 }
 
 # Size fraction labels
-facet_labels <- c("0.2" = "0.2–0.5 mm", "0.5" = "0.5–1 mm", "1" = "1–2 mm")
+facet_labels <- c("0.2" = "0.2â€“0.5 mm", "0.5" = "0.5â€“1 mm", "1" = "1â€“2 mm")
 
 # Create histograms per size_fraction
 histograms <- lapply(unique(all_amp_effs_18s_asv_nofilt$size_fraction), function(sf) {
@@ -2304,7 +2303,7 @@ hist_amp_effs_faceted <- wrap_plots(histograms, nrow = 3)
 hist_amp_effs_faceted
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.png"),
+  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.png"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -2313,7 +2312,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
+  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -2396,7 +2395,7 @@ load_most_recent_file <- function(suffix, primer, nofilt = TRUE) {
   library(here)
   
   # Directory path
-  target_dir <- here("PCR_bias_correction/data/predicted_og/")
+  target_dir <- here("data/predicted_og/")
   
   # Adjust pattern based on `nofilt` argument
   pattern <- paste0(
@@ -2457,7 +2456,7 @@ phy_taxa_pcr_coi= final_data_all_sizes_coi %>%
   mutate(taxa = coord)
 
 #Taxa file from pre-processed fido families for 18S
-coi_taxa=read.csv(here("PCR_bias_correction/data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv"))  %>% 
+coi_taxa=read.csv(here("data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv"))  %>% 
   select(-X) %>% 
   distinct() %>% 
   filter(Family != "Cliidae") %>% 
@@ -2489,7 +2488,7 @@ load_fido_raw_phy <- function(suffix, primer, nofilt = TRUE) {
   )
   
   # Full path
-  file_path <- here("PCR_bias_correction/data/fido/phy/", file_name)
+  file_path <- here("data/fido/phy/", file_name)
   
   # Read + process
   read.csv(file_path, row.names = 1) %>%
@@ -2711,7 +2710,7 @@ fig1 <- ggplot(plot_data_coi, aes(x = as.factor(PC1), y = Proportion, fill = tax
 fig1
 
 # Define output directory
-output_dir <- "PCR_bias_correction/figures/supporting_info/coi/"
+output_dir <- "figures/supporting_info/coi/"
 
 # Save the plot as PNG
 ggsave(
@@ -2778,7 +2777,7 @@ fig1_order <- ggplot(plot_data_coi, aes(x = Sample_ID_short, y = Proportion, fil
 fig1_order
 
 # Define output directory
-output_dir <- "PCR_bias_correction/figures/supporting_info/coi/"
+output_dir <- "figures/supporting_info/coi/"
 
 # Save the plot as PNG
 if(saving==1){
@@ -2833,7 +2832,7 @@ taxa_colors_coi <- c(
 
 #Use all taxa (no filter)
 # Load data
-all_amp_effs_coi_nofilt <- read.csv(here("PCR_bias_correction/data/amp_effs/all_amp_effs_coi_all_sub_nofilt.csv"), row.names = 1) %>%
+all_amp_effs_coi_nofilt <- read.csv(here("data/amp_effs/all_amp_effs_coi_all_sub_nofilt.csv"), row.names = 1) %>%
   mutate(Genus = str_extract(Lambda.coord, "[^_]+$"))%>% 
   filter(Genus != "unidentified ")
 
@@ -2935,7 +2934,7 @@ amp_effs_all_and_subpools_by_taxa_coi_no_filt
 
 
 # Save the plot as PNG
-output_dir <- "PCR_bias_correction/figures/supporting_info/coi/"
+output_dir <- "figures/supporting_info/coi/"
 ggsave(
   filename = file.path(output_dir, "figure_s_aes_nofilt_coi.png"),
   plot = amp_effs_all_and_subpools_by_taxa_coi_no_filt,
@@ -2977,11 +2976,11 @@ mean_s_columns_coi_genus <- function(df, genus, suffix) {
 }
 
 
-fido_coi_s1_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s1_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
+fido_coi_s1_nofilt = read.csv(here("data/fido/phy/fido_coi_s1_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
   rownames_to_column("Genus")
-fido_coi_s2_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s2_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
+fido_coi_s2_nofilt = read.csv(here("data/fido/phy/fido_coi_s2_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
   rownames_to_column("Genus")
-fido_coi_s3_nofilt = read.csv(here("PCR_bias_correction/data/fido/phy/fido_coi_s3_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
+fido_coi_s3_nofilt = read.csv(here("data/fido/phy/fido_coi_s3_genus_phy_all_subpools_nofilt.csv"), header = TRUE, check.names = FALSE, row.names = 1) %>% 
   rownames_to_column("Genus")
 
 
@@ -3067,7 +3066,7 @@ lm_stats_by_size <- summarized_result %>%
     r2 = map_dbl(fit, ~ summary(.x)$r.squared),
     p = map_dbl(fit, ~ summary(.x)$coefficients[2, 4]),
     annotation = paste0(
-      "R² = ", formatC(r2, digits = 2, format = "f"), "\n",
+      "RÂ² = ", formatC(r2, digits = 2, format = "f"), "\n",
       "P = ", ifelse(p < 0.001, "<0.001", formatC(p, digits = 2, format = "f"))
     )
   )
@@ -3080,9 +3079,9 @@ cat("p-value:", pearson_coi$p.value, "\n\n")
 
 
 size_fraction_labels <- c(
-  "S1" = "0.2–0.5 mm",
-  "S2" = "0.5–1 mm",
-  "S3" = "1–2 mm"
+  "S1" = "0.2â€“0.5 mm",
+  "S2" = "0.5â€“1 mm",
+  "S3" = "1â€“2 mm"
 )
 
 # Plot
@@ -3158,7 +3157,7 @@ amp_effs_vs_rra_coi_nofilt
 
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
+  filename = here("figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
   plot = amp_effs_vs_rra_coi_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3167,7 +3166,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
+  filename = here("figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
   plot = amp_effs_vs_rra_coi_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3220,7 +3219,7 @@ figure_scoi_combined
 
 # Save the combined figure
 ggsave(
-  filename = file.path("PCR_bias_correction/figures/supporting_info/coi/figure_scoi_combined.png"),
+  filename = file.path("figures/supporting_info/coi/figure_scoi_combined.png"),
   plot = figure_scoi_combined,
   dpi = 600,
   width = 7,
@@ -3229,7 +3228,7 @@ ggsave(
 )
 
 ggsave(
-  filename = file.path("PCR_bias_correction/figures/supporting_info/coi/figure_scoi_combined.pdf"),
+  filename = file.path("figures/supporting_info/coi/figure_scoi_combined.pdf"),
   plot = figure_scoi_combined,
   dpi = 600,
   width = 7,
@@ -3249,7 +3248,7 @@ bin_width_fd <- function(x) {
 }
 
 # Size fraction labels
-facet_labels <- c("0.2" = "0.2–0.5 mm", "0.5" = "0.5–1 mm", "1" = "1–2 mm")
+facet_labels <- c("0.2" = "0.2â€“0.5 mm", "0.5" = "0.5â€“1 mm", "1" = "1â€“2 mm")
 
 # Create histograms per size_fraction
 histograms <- lapply(unique(all_amp_effs_coi_nofilt$size_fraction), function(sf) {
@@ -3286,7 +3285,7 @@ hist_amp_effs_faceted <- wrap_plots(histograms, nrow = 1)
 hist_amp_effs_faceted
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.png"),
+  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.png"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -3295,7 +3294,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
+  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -3310,7 +3309,7 @@ taxa_sel="Calanoida"
 
 #Zooscan biomass proportion
 # All taxa
-zooscan_all=read.csv(here("PCR_bias_correction/data/Zooscan/zooscan_by_sample_biomass_esd.csv"), row.names = 1)%>%
+zooscan_all=read.csv(here("data/Zooscan/zooscan_by_sample_biomass_esd.csv"), row.names = 1)%>%
   # select(-X, acq_min_mesh) %>% 
   # mutate(Sample_ID=sample_id) %>%  
   distinct(.) %>% 
@@ -3354,9 +3353,9 @@ pcr_raw_zoo_coi=zooscan_taxa %>%
 
 facet_x_labels <- c(
   "biomass_prop_taxa" = "Log10(Biomass Proportion)",
-  "dryweight_C_mg_m2_taxa_mean" = "Log10 (Dry Weight (mg Cm²))",
+  "dryweight_C_mg_m2_taxa_mean" = "Log10 (Dry Weight (mg CmÂ²))",
   "relative_abundance" = "Log10(Relative Abundance)",
-  "abundance_m2_mean" = "Log10(Abundance (m²))"
+  "abundance_m2_mean" = "Log10(Abundance (mÂ²))"
 )
 
 facet_y_labels <- c(
@@ -3557,7 +3556,7 @@ ggplot(pcr_vs_dryweight,
 methods_correlation_plot
 #PNG & PDF Save
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/coi_correlations.png"),
+  filename = here("figures/supporting_info/coi/coi_correlations.png"),
   plot = methods_correlation_plot,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -3566,7 +3565,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("PCR_bias_correction/figures/supporting_info/coi/coi_correlations.pdf"),
+  filename = here("figures/supporting_info/coi/coi_correlations.pdf"),
   plot = methods_correlation_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements

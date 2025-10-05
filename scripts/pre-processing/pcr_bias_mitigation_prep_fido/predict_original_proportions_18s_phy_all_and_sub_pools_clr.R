@@ -1,4 +1,4 @@
-
+﻿
 #Script Using Fido to Predict the DNA Proportions in each sample at PCR Cycle 0
 
 # Libraries, data, etc ----------------------------------------------------
@@ -20,7 +20,7 @@ here()
 ###Load in the filtered data for the 18s primer using long format species and hash name so I ca identify taxa
 ##First Size 1
 
-fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1)%>%
+fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1)%>%
   #11/2024 sum in Salpidae
   # mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
   group_by(Family) %>%
@@ -29,7 +29,7 @@ fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s1_fam
   column_to_rownames("Family")
 
 #Metadata
-meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt)) %>%
   mutate(Run = case_when(
@@ -168,7 +168,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s1,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s1_phy_all_and_subpools_clr.csv")))
+write.csv(final_data_s1,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s1_phy_all_and_subpools_clr.csv")))
 
 
 
@@ -176,7 +176,7 @@ write.csv(final_data_s1,here(paste0("PCR_bias_correction/data/predicted_og/predi
 
 ############First 0.5-1############
 #Phyloseq Filtered
-fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
   #11/2024 sum in Salpidae
   # mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
   group_by(Family) %>%
@@ -185,7 +185,7 @@ fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s2_fam
   column_to_rownames("Family")
 
 #Metadata
-meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt)) %>%
   mutate(Run = case_when(
@@ -310,7 +310,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s2,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools_clr.csv")))
+write.csv(final_data_s2,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools_clr.csv")))
 
 
 
@@ -320,7 +320,7 @@ write.csv(final_data_s2,here(paste0("PCR_bias_correction/data/predicted_og/predi
 ######### Final size
 ##### 1-2mm####
 #Phyloseq Filtered
-fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
+fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"), header=TRUE, check.names = FALSE, row.names = 1) %>%
   #11/2024 sum in Salpidae
   # mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
   group_by(Family) %>%
@@ -330,7 +330,7 @@ fido_input_filt=read.csv(here("PCR_bias_correction/data/fido/phy/fido_18s_s3_fam
 
 
 #Metadata
-meta_18s=read.csv(file.path("PCR_bias_correction/data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(file.path("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt)) %>%
   mutate(Run = case_when(
@@ -453,7 +453,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s3,here(paste0("PCR_bias_correction/data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools_clr.csv")))
+write.csv(final_data_s3,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools_clr.csv")))
 
 
 
