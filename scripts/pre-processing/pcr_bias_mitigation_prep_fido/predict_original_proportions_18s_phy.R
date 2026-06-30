@@ -1,4 +1,4 @@
-﻿#Size based fido model
+#Size based fido model
 library(tidyverse)
 library(lubridate)
 library(ggplot2)
@@ -11,6 +11,9 @@ library(here)
 library(gridExtra)
 library(tidybayes)
 here()
+
+# Back-extrapolation target cycle (see scripts/pcr_correction_pipeline/config.R)
+if (!exists("target_cycle")) target_cycle <- 10
 
 
 ###Load in the pre-filtered family data
@@ -79,6 +82,7 @@ fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s1_ecdf_family_phy.csv"), 
 
 X.tmp.s1 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s1) <- rownames(X)
+X.tmp.s1["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -101,7 +105,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s1 <- predict(fit_prop_1, newdata=X.tmp.s1, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("0.2-0.5mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
@@ -193,6 +197,7 @@ fit_prop_2 <- to_proportions(fit_s2)
 #Predict at cycle 0
 X.tmp.s2 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s2) <- rownames(X)
+X.tmp.s2["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru
@@ -207,7 +212,7 @@ for(s in samples_to_loop$sample){
   X.tmp.s2[s,] <-1
   
   predicted_s2 <- predict(fit_prop_2, newdata=X.tmp.s2, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("0.5-1mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
@@ -292,6 +297,7 @@ fit_prop_3 <- to_proportions(fit_s3)
 #Make X.tmp for loop
 X.tmp.s3 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s3) <- rownames(X)
+X.tmp.s3["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru
@@ -306,7 +312,7 @@ for(s in samples_to_loop$sample){
   X.tmp.s3[s,] <-1
   
   predicted_s3 <- predict(fit_prop_3, newdata=X.tmp.s3, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("1-2mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%

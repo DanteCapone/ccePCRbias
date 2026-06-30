@@ -1,4 +1,4 @@
-﻿
+
 # Libraries, data, etc ----------------------------------------------------
 
 
@@ -15,6 +15,9 @@ library(stringr)
 library(here)
 library(gridExtra)
 here()
+
+# Back-extrapolation target cycle (see scripts/pcr_correction_pipeline/config.R)
+if (!exists("target_cycle")) target_cycle <- 10
 
 
 
@@ -77,6 +80,7 @@ fit_prop_1 <- to_proportions(fit_s1)
 
 X.tmp.s1 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s1) <- rownames(X)
+X.tmp.s1["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -99,7 +103,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s1 <- predict(fit_prop_1, newdata=X.tmp.s1, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("0.2-0.5mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
@@ -220,6 +224,7 @@ sample_sel="sample_numC1.T7.H9_s2"
 
 X.tmp.s2 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s2) <- rownames(X)
+X.tmp.s2["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -242,7 +247,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s2 <- predict(fit_prop_1, newdata=X.tmp.s2, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("0.5-1mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
@@ -356,6 +361,7 @@ sample_sel="sample_numC1.T7.H9_s3"
 
 X.tmp.s3 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s3) <- rownames(X)
+X.tmp.s3["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -378,7 +384,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s3 <- predict(fit_prop_1, newdata=X.tmp.s3, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("1-2mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%

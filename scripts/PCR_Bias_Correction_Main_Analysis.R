@@ -1,11 +1,16 @@
-﻿#Analysis Script for PCR Bias Correction Paper
+#Analysis Script for PCR Bias Correction Paper
+
+
 
 # Read in the Data --------------------------------------------------------
 
 # Packages and Functions --------------------------------------------------
-    8â†’librarian::shelf(tidyverse, googledrive, stringr,here,phyloseq,
+librarian::shelf(tidyverse, googledrive, stringr,here,phyloseq,
                  extrafont, RColorBrewer, fido, compositions, ggpubr, patchwork, colorspace,
                  purrr, broom)
+
+# Anchor here() to this project folder
+here::i_am("scripts/PCR_Bias_Correction_Main_Analysis.R")
 
 #Add functions for myself
 source(here("scripts/helpful_functions/treemap_funs_Capone.R"))
@@ -14,9 +19,22 @@ source(here("scripts/helpful_functions/general_helper_functions.R"))
 
 saving=0
 
+# PCR cycle at which the fido model back-extrapolates composition.
+# Must match target_cycle in scripts/pcr_correction_pipeline/config.R and the
+# predict_original_proportions_*.R scripts that generated data/predicted_og/.
+# Allow override from a wrapper script (e.g., source with target_cycle <- 0)
+if (!exists("target_cycle")) {
+  target_cycle <- 10
+}
+
+# Cycle-specific output directories so different target_cycle runs don't overwrite each other
+out_dir_fig <- here("figures", paste0("cycle", target_cycle))
+out_dir_tab <- here("tables", paste0("cycle", target_cycle))
+dir.create(out_dir_fig, showWarnings = FALSE, recursive = TRUE)
+dir.create(out_dir_tab, showWarnings = FALSE, recursive = TRUE)
+
 
 # Load in the data -----------------------------------------------------
-{{ ... }}
 
 #Metadata
 metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv"))%>%
@@ -36,7 +54,7 @@ depths=read.csv(here("data/physical_environmental_data/sample_depths.csv")) %>%
 volume_filtered=read.csv(here("data/raw_data/biomass/p2107_bt_volume_filtered.csv"))
 
 #Dryweights
-dryweights=read.csv("data/raw_data/biomass/dryweights_forzoopmetab.csv") %>%
+dryweights=read.csv(here("data/raw_data/biomass/dryweights_forzoopmetab.csv")) %>%
   mutate(biomass_dry=8/3*biomass_dry) %>% 
   left_join(.,volume_filtered, by = c("Sample_ID_short"))%>% 
   left_join(.,depths, by="Sample_ID_short") %>%
@@ -56,6 +74,7 @@ env_metadata=metadata %>%
   mutate(biomass_mg_m2=biomass_dry/Volume_Filtered_m3*210) %>%
   select(-Sample_ID.y) %>%
   mutate(Sample_ID=Sample_ID.x)
+
 
 
 
@@ -129,7 +148,7 @@ final_data_all_sizes_18s=rbind(fido_s1_18s,fido_s2_18s,fido_s3_18s) %>%
 
 #Make final dataframe
 phy_taxa_pcr_18s= final_data_all_sizes_18s %>%
-  filter(cycle_num==0) %>% 
+  filter(cycle_num==target_cycle) %>% 
   mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) %>%
   left_join(.,env_metadata, by="Sample_ID")%>%
   mutate(taxa = coord)
@@ -410,9 +429,9 @@ fig1 <- ggplot(plot_data_18s, aes(x = as.factor(PC1), y = Proportion, fill = tax
   ) +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1, size = 8),         # ~6â€“8 pt
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 8),         # ~6–8 pt
     axis.text.y = element_text(size = 8),
-    axis.title.x = element_text(size = 8, face = "bold"),                # ~8â€“9 pt
+    axis.title.x = element_text(size = 8, face = "bold"),                # ~8–9 pt
     axis.title.y = element_text(size = 8, face = "bold"),
     strip.text = element_text(size = 8, face = "bold"),
     legend.text = element_text(size = 8),
@@ -424,7 +443,7 @@ fig1 <- ggplot(plot_data_18s, aes(x = as.factor(PC1), y = Proportion, fill = tax
 fig1
 
 # Define output directory
-output_dir <- "figures/v0"
+output_dir <- file.path(out_dir_fig, "v0")
 
 # Save the plot as PNG
 ggsave(
@@ -492,7 +511,7 @@ ggsave(
 # fig1_order
 # 
 # # Define output directory
-# output_dir <- "figures/v0"
+# output_dir <- file.path(out_dir_fig, "v0")
 # 
 # # Save the plot as PNG
 # ggsave(
@@ -610,7 +629,7 @@ amp_effs_all_and_subpools_by_taxa_18s_no_filt
 
 
 # Save the plot as PNG
-output_dir <- "figures/supporting_info/"
+output_dir <- file.path(out_dir_fig, "supporting_info")
 ggsave(
   filename = file.path(output_dir, "figure_s4_aes_nofilt.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s_no_filt,
@@ -741,9 +760,9 @@ cat("p-value:", pearson_18s$p.value, "\n\n")
 
 
 size_fraction_labels <- c(
-  "S1" = "0.2â€“0.5 mm",
-  "S2" = "0.5â€“1 mm",
-  "S3" = "1â€“2 mm"
+  "S1" = "0.2–0.5 mm",
+  "S2" = "0.5–1 mm",
+  "S3" = "1–2 mm"
 )
 
 # Plot
@@ -818,7 +837,7 @@ amp_effs_vs_rra_18s_nofilt
 
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/v0/fig3b_amp_effs_vs_rra_18s_nofilt.png"),
+  filename = file.path(out_dir_fig, "v0/fig3b_amp_effs_vs_rra_18s_nofilt.png"),
   plot = amp_effs_vs_rra_18s_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -827,7 +846,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/v0/amp_effs_vs_rra_18s_nofilt.pdf"),
+  filename = file.path(out_dir_fig, "v0/amp_effs_vs_rra_18s_nofilt.pdf"),
   plot = amp_effs_vs_rra_18s_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -871,17 +890,17 @@ amp_effs_vs_rra_18s_nofilt <- amp_effs_vs_rra_18s_nofilt +
   
 
 # Combine the plots
-figure_s4_combined <-  wrap_elements(amp_effs_all_and_subpools_by_taxa_18s_no_filt) /
+figure_4_combined <-  wrap_elements(amp_effs_all_and_subpools_by_taxa_18s_no_filt) /
   amp_effs_vs_rra_18s_nofilt +
   plot_layout(heights = c(1.1, 1), guides = "keep") +
   plot_annotation(tag_levels = 'A')  # This will label them "A", "B"
 
-figure_s4_combined
+figure_4_combined
 
 # Save the combined figure
 ggsave(
   filename = file.path(output_dir, "figure_4_combined.png"),
-  plot = figure_s4_combined,
+  plot = figure_4_combined,
   dpi = 600,
   width = 7,
   height = 8,  # Adjust height to accommodate both plots vertically
@@ -890,7 +909,7 @@ ggsave(
 
 ggsave(
   filename = file.path(output_dir, "figure_4_combined.pdf"),
-  plot = figure_s4_combined,
+  plot = figure_4_combined,
   dpi = 600,
   width = 7,
   height = 8,
@@ -964,10 +983,10 @@ pcr_raw_zoo_18s=zooscan_taxa %>%
 # X is: Zooscan biomass, abundance or relative of each
 
 facet_x_labels <- c(
-  "biomass_prop_taxa" = "Log10(Biomass Proportion)",
-  "dryweight_C_mg_m2_taxa_mean" = "Log10 (Dry Weight (mg CmÂ²))",
-  "relative_abundance" = "Log10(Relative Abundance)",
-  "abundance_m2_mean" = "Log10(Abundance (mÂ²))"
+  "biomass_prop_taxa" = "arcsine-sqrt(Biomass Proportion)",
+  "dryweight_C_mg_m2_taxa_mean" = "Log10(Dry Weight (mg C/m²))",
+  "relative_abundance" = "arcsine-sqrt(Relative Abundance)",
+  "abundance_m2_mean" = "Log10(Abundance (m²))"
 )
 
 facet_y_labels <- c(
@@ -977,18 +996,23 @@ facet_y_labels <- c(
 
 size_fraction_labels <- c("0.2-0.5 mm", "0.5-1 mm", "1-2 mm")
 
-# Convert data to long format and filter for log transformations
+# Convert data to long format and filter for transformations
 pcr_raw_zoo_18s_long <- pcr_raw_zoo_18s %>%
   filter(!is.na(cycle)) %>%
   pivot_longer(cols = c(biomass_prop_taxa, dryweight_C_mg_m2_taxa_mean, relative_abundance, abundance_m2_mean), 
                names_to = "x_variable", values_to = "x_value") %>%
   pivot_longer(cols = c(n_reads_raw, n_reads_pcr), 
                names_to = "y_variable", values_to = "y_value") %>%
-  filter(x_value > 0, y_value >= 0) %>%  # Ensure valid sqrt transform (y_value >= 0)
+  filter(x_value > 0, y_value >= 0) %>%  # Ensure valid transforms
   mutate(
     x_variable = factor(x_variable, levels = names(facet_x_labels), labels = facet_x_labels),
     y_variable = factor(y_variable, levels = names(facet_y_labels), labels = facet_y_labels),
-    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2"))
+    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2")),
+    # Apply appropriate transform based on variable type
+    x_transformed = case_when(
+      x_variable %in% c("arcsine-sqrt(Biomass Proportion)", "arcsine-sqrt(Relative Abundance)") ~ asin(sqrt(x_value)),
+      TRUE ~ log10(x_value)
+    )
   )
 
 
@@ -997,11 +1021,11 @@ n_tests <- pcr_raw_zoo_18s_long %>%
   distinct(size_fraction, y_variable, x_variable) %>%
   nrow()
 
-# Compute correlation per facet combination
+# Compute correlation per facet combination with appropriate transforms
 cor_results_grid <- pcr_raw_zoo_18s_long %>%
   group_by(size_fraction, y_variable, x_variable) %>%
   summarise(
-    cor_test = list(cor.test(log10(x_value), asin(sqrt(y_value)))),
+    cor_test = list(cor.test(x_transformed, asin(sqrt(y_value)))),
     .groups = "drop"
   ) %>%
   mutate(
@@ -1018,7 +1042,7 @@ cor_results_grid <- pcr_raw_zoo_18s_long %>%
 
 # Create 6-row, 4-column facet grid plot
 zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_18s_long, 
-                          aes(x = ((x_value)), 
+                          aes(x = x_transformed, 
                               y = asin(sqrt(y_value)))) +  # Apply asin sqrt transformation
   geom_point(aes(shape = cycle, size = 3, color = as.factor(size_fraction), fill = as.factor(size_fraction))) +
   scale_shape_manual(values = c("1" = 21, "2" = 22, "3"=24, "T1"=23, "T2"=25)) +
@@ -1028,8 +1052,8 @@ zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_18s_long,
                      labels = size_fraction_labels) +
   facet_grid(rows = vars(size_fraction, y_variable), cols = vars(x_variable), scales = "free") +  # 6x4 layout
   labs(
-    x = "Log10 Transformed X-Axis Variables",
-    y = "asin(sqrt(Read Counts))",
+    x = "Transformed X-Axis Variables (arcsine-sqrt for proportions, log10 for others)",
+    y = "arcsine-sqrt(Read Counts)",
     shape = "Cycle",
     color = "Size Fraction"
   ) +
@@ -1062,11 +1086,18 @@ zoo_vs_pcr_grid
 
 # Compile correlation results into a clean summary table
 cor_summary_table <- cor_results_grid %>%
-  select(size_fraction, y_variable, x_variable, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  mutate(
+    x_transform = case_when(
+      x_variable %in% c("arcsine-sqrt(Biomass Proportion)", "arcsine-sqrt(Relative Abundance)") ~ "arcsine-sqrt",
+      TRUE ~ "log10"
+    )
+  ) %>%
+  select(size_fraction, y_variable, x_variable, x_transform, r, p_uncorrected, p_bonferroni, p_bh) %>%
   rename(
     `Molecular Metric` = y_variable,
     `Size Fraction` = size_fraction,
     `Zooscan Metric` = x_variable,
+    `X-Axis Transformation` = x_transform,
     `Pearson R` = r,
     `p (Uncorrected)` = p_uncorrected,
     `p (BH)` = p_bh
@@ -1077,7 +1108,7 @@ cor_summary_table <- cor_results_grid %>%
 print(cor_summary_table)
 
 # Optionally write to CSV
-write.csv(cor_summary_table, here("PCR_bias_correction/tables/correlation_summary_table_18s.csv"), row.names = FALSE)
+write.csv(cor_summary_table, file.path(out_dir_tab, "correlation_summary_table_18s.csv"), row.names = FALSE)
 
 
 
@@ -1169,7 +1200,7 @@ ggplot(pcr_vs_dryweight,
 methods_correlation_plot
   #PNG & PDF Save
 ggsave(
-  filename = here("figures/v0/figure_5_v0.png"),
+  filename = file.path(out_dir_fig, "v0/figure_5_v0.png"),
   plot = methods_correlation_plot,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -1178,7 +1209,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/v0/figure_5_v0.pdf"),
+  filename = file.path(out_dir_fig, "v0/figure_5_v0.pdf"),
   plot = methods_correlation_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -1186,6 +1217,375 @@ ggsave(
   units = "in"
 )
 
+
+# Biomass Proportion vs Read Counts with log10 biomass and arcsin-sqrt reads (18S) ----
+# Filter and reshape for plotting - include both raw and PCR corrected reads
+biomass_vs_rel_abundance_18s <- pcr_raw_zoo_18s %>%
+  filter(!is.na(cycle)) %>%
+  select(sample_id, cycle, size_fraction, biomass_prop_taxa, n_reads_raw, n_reads_pcr) %>%
+  filter(biomass_prop_taxa > 0, biomass_prop_taxa <= 1) %>%
+  pivot_longer(cols = c(n_reads_raw, n_reads_pcr),
+               names_to = "y_variable", values_to = "y_value") %>%
+  filter(y_value >= 0) %>%
+  mutate(
+    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2")),
+    y_variable = factor(y_variable, levels = c("n_reads_raw", "n_reads_pcr"),
+                        labels = c("Raw Reads", "PCR-Corrected Reads"))
+  )
+
+# Number of comparisons = number of facet combinations
+n_tests_18s <- biomass_vs_rel_abundance_18s %>%
+  distinct(y_variable, size_fraction) %>%
+  nrow()
+
+# Compute Pearson correlation per facet combination
+cor_results_biomass_rel_18s <- biomass_vs_rel_abundance_18s %>%
+  group_by(y_variable, size_fraction) %>%
+  summarise(
+    cor_test = list(cor.test(
+      asin(sqrt(biomass_prop_taxa)),
+      asin(sqrt(y_value))
+    )),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    r = map_dbl(cor_test, ~ .x$estimate),
+    p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
+    p_bonferroni = pmin(p_uncorrected * n_tests_18s, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
+    label = paste0(
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.01, "<0.01", formatC(p_bh, digits = 2, format = "f"))
+    )
+  )
+
+# Plot
+biomass_rel_plot_18s <- ggplot(biomass_vs_rel_abundance_18s,
+       aes(x = asin(sqrt(biomass_prop_taxa)),
+           y = asin(sqrt(y_value)),
+           fill = size_fraction)) +
+  geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
+  scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
+  scale_fill_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), labels = size_fraction_labels, name = "Size Fraction") +
+  facet_grid(rows = vars(y_variable), cols = vars(size_fraction), scales = "free_y") +
+  labs(
+    x = "arcsine-sqrt(Biomass Proportion)",
+    y = "arcsine-sqrt Read Counts",
+    shape = "Cycle",
+    fill = "Size Fraction"
+  ) +
+  geom_text(
+    data = cor_results_biomass_rel_18s,
+    aes(label = label),
+    x = 0.5, y = Inf,
+    hjust = 1, vjust = 1.5,
+    inherit.aes = FALSE,
+    size = 2.5, fontface = "italic"
+  )  +
+  guides(
+    fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
+    shape = guide_legend(override.aes = list(fill = "gray90", color = "black")),
+    color = "none"
+  ) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_line(color = "gray80", size = 0.5),
+    panel.grid.minor = element_line(color = "gray90", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif")
+  )
+
+biomass_rel_plot_18s
+
+# PNG & PDF Save
+ggsave(
+  filename = file.path(out_dir_fig, "v0/18s_biomass_proportion_vs_relative_abundance.png"),
+  plot = biomass_rel_plot_18s,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+ggsave(
+  filename = file.path(out_dir_fig, "v0/18s_biomass_proportion_vs_relative_abundance.pdf"),
+  plot = biomass_rel_plot_18s,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+# Compile correlation results into a clean summary table
+cor_summary_biomass_rel_18s <- cor_results_biomass_rel_18s %>%
+  mutate(`Transformation` = "arcsine-sqrt both variables") %>%
+  select(size_fraction, `Transformation`, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  rename(
+    `Size Fraction` = size_fraction,
+    `Pearson R` = r,
+    `p (Uncorrected)` = p_uncorrected,
+    `p (BH)` = p_bh
+  ) %>%
+  arrange(`Size Fraction`)
+
+print(cor_summary_biomass_rel_18s)
+
+# Write to CSV
+write.csv(cor_summary_biomass_rel_18s, file.path(out_dir_tab, "18s_biomass_proportion_vs_relative_abundance_correlations.csv"), row.names = FALSE)
+
+
+# Relative Abundance vs Read Counts with arcsin-sqrt on both (18S) ----
+# Filter and reshape for plotting - include both raw and PCR corrected reads
+relabund_vs_reads_18s <- pcr_raw_zoo_18s %>%
+  filter(!is.na(cycle)) %>%
+  select(sample_id, cycle, size_fraction, relative_abundance, n_reads_raw, n_reads_pcr) %>%
+  filter(relative_abundance > 0, relative_abundance <= 1) %>%
+  pivot_longer(cols = c(n_reads_raw, n_reads_pcr),
+               names_to = "y_variable", values_to = "y_value") %>%
+  filter(y_value >= 0) %>%
+  mutate(
+    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2")),
+    y_variable = factor(y_variable, levels = c("n_reads_raw", "n_reads_pcr"),
+                        labels = c("Raw Reads", "PCR-Corrected Reads"))
+  )
+
+# Number of comparisons = number of facet combinations
+n_tests_relabund_18s <- relabund_vs_reads_18s %>%
+  distinct(y_variable, size_fraction) %>%
+  nrow()
+
+# Compute Pearson correlation per facet combination
+cor_results_relabund_reads_18s <- relabund_vs_reads_18s %>%
+  group_by(y_variable, size_fraction) %>%
+  summarise(
+    cor_test = list(cor.test(
+      asin(sqrt(relative_abundance)),
+      asin(sqrt(y_value))
+    )),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    r = map_dbl(cor_test, ~ .x$estimate),
+    p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
+    p_bonferroni = pmin(p_uncorrected * n_tests_relabund_18s, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
+    label = paste0(
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.01, "<0.01", formatC(p_bh, digits = 2, format = "f"))
+    )
+  )
+
+# Plot
+relabund_reads_plot_18s <- ggplot(relabund_vs_reads_18s,
+       aes(x = asin(sqrt(relative_abundance)),
+           y = asin(sqrt(y_value)),
+           fill = size_fraction)) +
+  geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
+  scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
+  scale_fill_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), labels = size_fraction_labels, name = "Size Fraction") +
+  facet_grid(rows = vars(y_variable), cols = vars(size_fraction), scales = "free_y") +
+  labs(
+    x = "arcsine-sqrt(Relative Abundance)",
+    y = "arcsine-sqrt Read Counts",
+    shape = "Cycle",
+    fill = "Size Fraction"
+  ) +
+  geom_text(
+    data = cor_results_relabund_reads_18s,
+    aes(label = label),
+    x = 0.5, y = Inf,
+    hjust = 1, vjust = 1.5,
+    inherit.aes = FALSE,
+    size = 2.5, fontface = "italic"
+  )  +
+  guides(
+    fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
+    shape = guide_legend(override.aes = list(fill = "gray90", color = "black")),
+    color = "none"
+  ) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_line(color = "gray80", size = 0.5),
+    panel.grid.minor = element_line(color = "gray90", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif")
+  )
+
+relabund_reads_plot_18s
+
+# PNG & PDF Save
+ggsave(
+  filename = file.path(out_dir_fig, "v0/18s_relative_abundance_vs_reads.png"),
+  plot = relabund_reads_plot_18s,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+ggsave(
+  filename = file.path(out_dir_fig, "v0/18s_relative_abundance_vs_reads.pdf"),
+  plot = relabund_reads_plot_18s,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+# Compile correlation results into a clean summary table
+cor_summary_relabund_reads_18s <- cor_results_relabund_reads_18s %>%
+  mutate(`Transformation` = "arcsine-sqrt both variables") %>%
+  select(size_fraction, y_variable, `Transformation`, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  rename(
+    `Size Fraction` = size_fraction,
+    `Read Type` = y_variable,
+    `Pearson R` = r,
+    `p (Uncorrected)` = p_uncorrected,
+    `p (BH)` = p_bh
+  ) %>%
+  arrange(`Read Type`, `Size Fraction`)
+
+print(cor_summary_relabund_reads_18s)
+
+# Write to CSV
+write.csv(cor_summary_relabund_reads_18s, file.path(out_dir_tab, "18s_relative_abundance_vs_reads_correlations.csv"), row.names = FALSE)
+
+
+# Generate all biomass comparison plots with pastel palette ----------------
+# Biomass metrics: biomass_prop_taxa, dryweight_C_mg_m2_taxa_mean, relative_abundance, abundance_m2_mean
+# Read types: n_reads_raw, n_reads_pcr
+
+biomass_metrics <- c(
+  "biomass_prop_taxa" = "Biomass Proportion",
+  "dryweight_C_mg_m2_taxa_mean" = "Dry Weight C (mg/m²)",
+  "relative_abundance" = "Relative Abundance",
+  "abundance_m2_mean" = "Abundance (m²)"
+)
+
+read_types <- c(
+  "n_reads_raw" = "Raw Reads",
+  "n_reads_pcr" = "PCR-Corrected Reads"
+)
+
+# Pastel color palette (same as figure_5_v0)
+pastel_colors <- c("0.2-0.5" = "#AEDFF7", "0.5-1" = "#B6E3B6", "1-2" = "#FFB3AB")
+
+# Create output directory
+dir.create(file.path(out_dir_fig, "v0/methods_comparisons"), showWarnings = FALSE, recursive = TRUE)
+
+# Generate all 8 plots
+for (metric in names(biomass_metrics)) {
+  for (read_type in names(read_types)) {
+    
+    # Prepare data for this comparison
+    plot_data <- pcr_raw_zoo_18s %>%
+      filter(!is.na(cycle)) %>%
+      select(sample_id, cycle, size_fraction, !!sym(metric), !!sym(read_type)) %>%
+      filter(!!sym(metric) > 0, !!sym(read_type) >= 0) %>%
+      mutate(
+        read_type_label = read_types[[read_type]],
+        size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2"))
+      )
+    
+    # Compute correlation per size fraction
+    n_tests <- plot_data %>% distinct(size_fraction) %>% nrow()
+    
+    cor_results <- plot_data %>%
+      group_by(size_fraction) %>%
+      summarise(
+        cor_test = list(cor.test(
+          ~ log10(!!sym(metric)) + asin(sqrt(!!sym(read_type)))
+        )),
+        .groups = "drop"
+      ) %>%
+      mutate(
+        r = map_dbl(cor_test, ~ .x$estimate),
+        p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
+        p_bh = p.adjust(p_uncorrected, method = "BH"),
+        label = paste0(
+          "R = ", formatC(r, digits = 2, format = "f"), "\n",
+          "p = ", ifelse(p_bh < 0.001, "<0.001", formatC(p_bh, digits = 2, format = "f"))
+        )
+      )
+    
+    # Create plot
+    p <- ggplot(plot_data,
+                aes(x = log10(!!sym(metric)),
+                    y = asin(sqrt(!!sym(read_type))),
+                    fill = size_fraction)) +
+      geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
+      scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
+      scale_fill_manual(values = pastel_colors, labels = size_fraction_labels, name = "Size Fraction") +
+      facet_grid(cols = vars(size_fraction), scales = "free_y") +
+      labs(
+        x = paste0("Log10 ", biomass_metrics[[metric]]),
+        y = "arcsine-sqrt Relative Read Abundance",
+        shape = "Cycle",
+        fill = "Size Fraction",
+        title = paste(read_types[[read_type]], "vs", biomass_metrics[[metric]])
+      ) +
+      geom_text(
+        data = cor_results,
+        aes(label = label),
+        x = 0.5, y = 0.5,
+        inherit.aes = FALSE,
+        size = 3, fontface = "italic"
+      ) +
+      guides(
+        fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
+        shape = guide_legend(override.aes = list(fill = "gray90", color = "black")),
+        color = "none"
+      ) +
+      theme_classic() +
+      theme(
+        panel.grid.major = element_line(color = "gray80", size = 0.5),
+        panel.grid.minor = element_line(color = "gray90", size = 0.2),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        strip.background = element_rect(fill = "lightgray", color = "black"),
+        strip.text = element_text(size = 8, face = "bold", family = "serif"),
+        axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+        axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+        axis.title = element_text(size = 8, face = "bold", family = "serif"),
+        legend.title = element_text(size = 8, face = "bold", family = "serif"),
+        legend.text = element_text(size = 8, family = "serif"),
+        plot.title = element_text(size = 10, face = "bold", family = "serif")
+      )
+    
+    # Save plot
+    filename_base <- paste0(metric, "_vs_", read_type)
+    ggsave(
+      filename = here(paste0("figures/v0/methods_comparisons/", filename_base, "_v0.png")),
+      plot = p,
+      dpi = 600,
+      width = 6,
+      height = 4.5,
+      units = "in"
+    )
+    
+    ggsave(
+      filename = here(paste0("figures/v0/methods_comparisons/", filename_base, "_v0.pdf")),
+      plot = p,
+      dpi = 600,
+      width = 6,
+      height = 4.5,
+      units = "in"
+    )
+    
+    print(paste("Saved:", filename_base))
+  }
+}
 
 
 #Plot grouped bar plot for RRA, PCR-RA, Zoo-PB proporitions
@@ -1238,7 +1638,7 @@ ggplot(pcr_raw_zoo_18s_long, aes(x = as.factor(PC1), fill = Method)) +
 grouped_bar_all_18s
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/supporting_info/calanoid_methods_compare_18s.png"),
+  filename = file.path(out_dir_fig, "supporting_info/calanoid_methods_compare_18s.png"),
   plot = grouped_bar_all_18s,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -1247,7 +1647,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/calanoid_methods_compare_18s.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/calanoid_methods_compare_18s.pdf"),
   plot = grouped_bar_all_18s,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -1328,7 +1728,7 @@ ggplot(pcr_raw_zoo_18s_mse, aes(x = as.factor(PC1), y = difference, fill = color
 mse_plot
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/supporting_info/mse_plot_methods_compare_18s.png"),
+  filename = file.path(out_dir_fig, "supporting_info/mse_plot_methods_compare_18s.png"),
   plot = mse_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -1337,13 +1737,37 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/mse_plot_methods_compare_18s.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/mse_plot_methods_compare_18s.pdf"),
   plot = mse_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
   height = 4.5, # Adjust height (inches) based on journal requirements
   units = "in"
 )
+
+# Narrative description for MSE comparison (PCR-RA = n_reads_pcr, RRA = n_reads_raw)
+# Dynamically populate the median square-error values from sum_mse
+mse_narrative <- sum_mse %>%
+  mutate(
+    size_label = paste0(size_fraction, "mm"),
+    pair_text = paste0(
+      size_label, ": MSEPCR-RA=", formatC(average_mse_by_size_pcr, digits = 3, format = "f"),
+      ", MSERaw=", formatC(average_mse_by_size_raw, digits = 3, format = "f")
+    )
+  ) %>%
+  pull(pair_text) %>%
+  paste(collapse = ", ")
+
+narrative_text <- paste0(
+  "When comparing relative metrics in terms of absolute difference by sample, we found that PCR bias correction resulted in better agreement in the smallest size class and worse in the 0.5-1, and 1-2mm size classes (",
+  mse_narrative,
+  "; Figure S12)."
+)
+
+print(narrative_text)
+
+# Optionally write to a text file for easy copying into the manuscript
+writeLines(narrative_text, file.path(out_dir_tab, "mse_narrative_18s.txt"))
 
 
 #Combine Figure S5
@@ -1365,7 +1789,7 @@ figure_s5_combined
 
 # Save the combined figure
 ggsave(
-  filename = here("figures/supporting_info/figure_s5_combined.png"),
+  filename = file.path(out_dir_fig, "supporting_info/figure_s5_combined.png"),
   plot = figure_s5_combined,
   dpi = 600,
   width = 7,
@@ -1374,7 +1798,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/figure_s5_combined.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/figure_s5_combined.pdf"),
   plot = figure_s5_combined,
   dpi = 600,
   width = 7,
@@ -1501,7 +1925,7 @@ amp_effs_all_and_subpools_by_taxa_18s
 
 
 # Save the plot as PNG
-output_dir <- "figures/v0"
+output_dir <- file.path(out_dir_fig, "v0")
 ggsave(
   filename = file.path(output_dir, "amp_effs_18s.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s,
@@ -1629,7 +2053,7 @@ amp_effs_vs_rra_18s
 
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/methods_comparison/amp_effs_vs_rra_18s_nocollodaria.png"),
+  filename = file.path(out_dir_fig, "methods_comparison/amp_effs_vs_rra_18s_nocollodaria.png"),
   plot = amp_effs_vs_rra_18s,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -1638,7 +2062,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/methods_comparison/amp_effs_vs_rra_18s_nocollodaria.pdf"),
+  filename = file.path(out_dir_fig, "methods_comparison/amp_effs_vs_rra_18s_nocollodaria.pdf"),
   plot = amp_effs_vs_rra_18s,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -1791,7 +2215,7 @@ amp_effs_all_and_subpools_by_taxa_18s_asv
 
 
 # Save the plot as PNG
-output_dir <- "figures/supporting_info/"
+output_dir <- file.path(out_dir_fig, "supporting_info")
 ggsave(
   filename = file.path(output_dir, "figure_s4_aes_asv.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s_asv,
@@ -1983,7 +2407,7 @@ amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt
 
 
 # Save the plot as PNG
-output_dir <- "figures/supporting_info/"
+output_dir <- file.path(out_dir_fig, "supporting_info")
 ggsave(
   filename = file.path(output_dir, "figure_s4_aes_asv_nofilt.png"),
   plot = amp_effs_all_and_subpools_by_taxa_18s_asv_nofilt,
@@ -2138,7 +2562,7 @@ filtered_data <- summarized_result %>% filter(Mean > 0) %>%
   mutate(Order = replace_na(Order, "unidentified Order"))  %>%
   mutate(Order = factor(Order, levels = names(taxa_colors_18s_order)))
 
-# Fit linear models by SizeFraction and extract RÂ² and p-value
+# Fit linear models by SizeFraction and extract R² and p-value
 lm_stats_by_size <- filtered_data %>%
   group_by(SizeFraction) %>%
   nest() %>%
@@ -2152,7 +2576,7 @@ lm_stats_by_size <- filtered_data %>%
 # Format the text for annotation
 lm_stats_by_size <- lm_stats_by_size %>%
   mutate(
-    annotation = paste0("RÂ² = ", round(r.squared, 2), 
+    annotation = paste0("R² = ", round(r.squared, 2), 
                         "\nP = ", format.pval(p.value, digits = 2, eps = 0.001))
   )
 
@@ -2237,7 +2661,7 @@ amp_effs_vs_rra_18s_asv <- filtered_data %>%
 
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/supporting_info/figures_amp_effs_vs_rra_18s_asv.png"),
+  filename = file.path(out_dir_fig, "supporting_info/figures_amp_effs_vs_rra_18s_asv.png"),
   plot = amp_effs_vs_rra_18s_asv,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -2246,7 +2670,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/figures_amp_effs_vs_rra_18s_nocollodaria.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/figures_amp_effs_vs_rra_18s_nocollodaria.pdf"),
   plot = amp_effs_vs_rra_18s_asv,
   dpi = 600,
   width = 7, # Adjust width (inches) based on journal requirements
@@ -2266,7 +2690,7 @@ bin_width_fd <- function(x) {
 }
 
 # Size fraction labels
-facet_labels <- c("0.2" = "0.2â€“0.5 mm", "0.5" = "0.5â€“1 mm", "1" = "1â€“2 mm")
+facet_labels <- c("0.2" = "0.2–0.5 mm", "0.5" = "0.5–1 mm", "1" = "1–2 mm")
 
 # Create histograms per size_fraction
 histograms <- lapply(unique(all_amp_effs_18s_asv_nofilt$size_fraction), function(sf) {
@@ -2303,7 +2727,7 @@ hist_amp_effs_faceted <- wrap_plots(histograms, nrow = 3)
 hist_amp_effs_faceted
 
 ggsave(
-  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.png"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/amp_eff_histogram_coi.png"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -2312,7 +2736,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/amp_eff_histogram_coi.pdf"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -2450,7 +2874,7 @@ final_data_all_sizes_coi=rbind(fido_s1_coi,fido_s2_coi,fido_s3_coi) %>%
 
 #Make final dataframe
 phy_taxa_pcr_coi= final_data_all_sizes_coi %>%
-  filter(cycle_num==0) %>% 
+  filter(cycle_num==target_cycle) %>% 
   mutate(Sample_ID = str_extract(replicate, "(?<=predicted )\\S+")) %>%
   left_join(.,env_metadata, by="Sample_ID")%>%
   mutate(taxa = coord)
@@ -2460,6 +2884,7 @@ coi_taxa=read.csv(here("data/phyloseq_bio_data/COI/fido_coi_genus_tax_table.csv"
   select(-X) %>% 
   distinct() %>% 
   filter(Family != "Cliidae") %>% 
+  mutate(Genus = ifelse(Genus == "Genus", paste0("unidentified ", Family), Genus)) %>% 
   column_to_rownames("Genus")
 
 #Filter to calanoida
@@ -2710,7 +3135,7 @@ fig1 <- ggplot(plot_data_coi, aes(x = as.factor(PC1), y = Proportion, fill = tax
 fig1
 
 # Define output directory
-output_dir <- "figures/supporting_info/coi/"
+output_dir <- file.path(out_dir_fig, "supporting_info/coi")
 
 # Save the plot as PNG
 ggsave(
@@ -2777,7 +3202,7 @@ fig1_order <- ggplot(plot_data_coi, aes(x = Sample_ID_short, y = Proportion, fil
 fig1_order
 
 # Define output directory
-output_dir <- "figures/supporting_info/coi/"
+output_dir <- file.path(out_dir_fig, "supporting_info/coi")
 
 # Save the plot as PNG
 if(saving==1){
@@ -2934,7 +3359,7 @@ amp_effs_all_and_subpools_by_taxa_coi_no_filt
 
 
 # Save the plot as PNG
-output_dir <- "figures/supporting_info/coi/"
+output_dir <- file.path(out_dir_fig, "supporting_info/coi")
 ggsave(
   filename = file.path(output_dir, "figure_s_aes_nofilt_coi.png"),
   plot = amp_effs_all_and_subpools_by_taxa_coi_no_filt,
@@ -3066,7 +3491,7 @@ lm_stats_by_size <- summarized_result %>%
     r2 = map_dbl(fit, ~ summary(.x)$r.squared),
     p = map_dbl(fit, ~ summary(.x)$coefficients[2, 4]),
     annotation = paste0(
-      "RÂ² = ", formatC(r2, digits = 2, format = "f"), "\n",
+      "R² = ", formatC(r2, digits = 2, format = "f"), "\n",
       "P = ", ifelse(p < 0.001, "<0.001", formatC(p, digits = 2, format = "f"))
     )
   )
@@ -3079,9 +3504,9 @@ cat("p-value:", pearson_coi$p.value, "\n\n")
 
 
 size_fraction_labels <- c(
-  "S1" = "0.2â€“0.5 mm",
-  "S2" = "0.5â€“1 mm",
-  "S3" = "1â€“2 mm"
+  "S1" = "0.2–0.5 mm",
+  "S2" = "0.5–1 mm",
+  "S3" = "1–2 mm"
 )
 
 # Plot
@@ -3157,7 +3582,7 @@ amp_effs_vs_rra_coi_nofilt
 
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
   plot = amp_effs_vs_rra_coi_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3166,7 +3591,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/figs_amp_effs_vs_rra_coi_nofilt.png"),
   plot = amp_effs_vs_rra_coi_nofilt,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3219,7 +3644,7 @@ figure_scoi_combined
 
 # Save the combined figure
 ggsave(
-  filename = file.path("figures/supporting_info/coi/figure_scoi_combined.png"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/figure_scoi_combined.png"),
   plot = figure_scoi_combined,
   dpi = 600,
   width = 7,
@@ -3228,7 +3653,7 @@ ggsave(
 )
 
 ggsave(
-  filename = file.path("figures/supporting_info/coi/figure_scoi_combined.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/figure_scoi_combined.pdf"),
   plot = figure_scoi_combined,
   dpi = 600,
   width = 7,
@@ -3248,7 +3673,7 @@ bin_width_fd <- function(x) {
 }
 
 # Size fraction labels
-facet_labels <- c("0.2" = "0.2â€“0.5 mm", "0.5" = "0.5â€“1 mm", "1" = "1â€“2 mm")
+facet_labels <- c("0.2" = "0.2–0.5 mm", "0.5" = "0.5–1 mm", "1" = "1–2 mm")
 
 # Create histograms per size_fraction
 histograms <- lapply(unique(all_amp_effs_coi_nofilt$size_fraction), function(sf) {
@@ -3285,7 +3710,7 @@ hist_amp_effs_faceted <- wrap_plots(histograms, nrow = 1)
 hist_amp_effs_faceted
 
 ggsave(
-  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.png"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/amp_eff_histogram_coi.png"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -3294,7 +3719,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/coi/amp_eff_histogram_coi.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/amp_eff_histogram_coi.pdf"),
   plot = hist_amp_effs,
   dpi = 600,
   width = 6,
@@ -3352,10 +3777,10 @@ pcr_raw_zoo_coi=zooscan_taxa %>%
 # X is: Zooscan biomass, abundance or relative of each
 
 facet_x_labels <- c(
-  "biomass_prop_taxa" = "Log10(Biomass Proportion)",
-  "dryweight_C_mg_m2_taxa_mean" = "Log10 (Dry Weight (mg CmÂ²))",
-  "relative_abundance" = "Log10(Relative Abundance)",
-  "abundance_m2_mean" = "Log10(Abundance (mÂ²))"
+  "biomass_prop_taxa" = "arcsine-sqrt(Biomass Proportion)",
+  "dryweight_C_mg_m2_taxa_mean" = "Log10(Dry Weight (mg C/m²))",
+  "relative_abundance" = "arcsine-sqrt(Relative Abundance)",
+  "abundance_m2_mean" = "Log10(Abundance (m²))"
 )
 
 facet_y_labels <- c(
@@ -3365,18 +3790,23 @@ facet_y_labels <- c(
 
 size_fraction_labels <- c("0.2-0.5 mm", "0.5-1 mm", "1-2 mm")
 
-# Convert data to long format and filter for log transformations
+# Convert data to long format and filter for transformations
 pcr_raw_zoo_coi_long <- pcr_raw_zoo_coi %>%
   filter(!is.na(cycle)) %>%
   pivot_longer(cols = c(biomass_prop_taxa, dryweight_C_mg_m2_taxa_mean, relative_abundance, abundance_m2_mean), 
                names_to = "x_variable", values_to = "x_value") %>%
   pivot_longer(cols = c(n_reads_raw, n_reads_pcr), 
                names_to = "y_variable", values_to = "y_value") %>%
-  filter(x_value > 0, y_value >= 0) %>%  # Ensure valid sqrt transform (y_value >= 0)
+  filter(x_value > 0, y_value >= 0) %>%  # Ensure valid transforms
   mutate(
     x_variable = factor(x_variable, levels = names(facet_x_labels), labels = facet_x_labels),
     y_variable = factor(y_variable, levels = names(facet_y_labels), labels = facet_y_labels),
-    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2"))
+    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2")),
+    # Apply appropriate transform based on variable type
+    x_transformed = case_when(
+      x_variable %in% c("arcsine-sqrt(Biomass Proportion)", "arcsine-sqrt(Relative Abundance)") ~ asin(sqrt(x_value)),
+      TRUE ~ log10(x_value)
+    )
   )
 
 
@@ -3385,11 +3815,11 @@ n_tests <- pcr_raw_zoo_coi_long %>%
   distinct(size_fraction, y_variable, x_variable) %>%
   nrow()
 
-# Compute correlation per facet combination
+# Compute correlation per facet combination with appropriate transforms
 cor_results_grid <- pcr_raw_zoo_coi_long %>%
   group_by(size_fraction, y_variable, x_variable) %>%
   summarise(
-    cor_test = list(cor.test(log10(x_value), asin(sqrt(y_value)))),
+    cor_test = list(cor.test(x_transformed, asin(sqrt(y_value)))),
     .groups = "drop"
   ) %>%
   mutate(
@@ -3406,7 +3836,7 @@ cor_results_grid <- pcr_raw_zoo_coi_long %>%
 
 # Create 6-row, 4-column facet grid plot
 zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_coi_long, 
-                          aes(x = ((x_value)), 
+                          aes(x = x_transformed, 
                               y = asin(sqrt(y_value)))) +  # Apply asin sqrt transformation
   geom_point(aes(shape = cycle, size = 3, color = as.factor(size_fraction), fill = as.factor(size_fraction))) +
   scale_shape_manual(values = c("1" = 21, "2" = 22, "3"=24, "T1"=23, "T2"=25)) +
@@ -3416,8 +3846,8 @@ zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_coi_long,
                      labels = size_fraction_labels) +
   facet_grid(rows = vars(size_fraction, y_variable), cols = vars(x_variable), scales = "free") +  # 6x4 layout
   labs(
-    x = "Log10 Transformed X-Axis Variables",
-    y = "asin(sqrt(Read Counts))",
+    x = "Transformed X-Axis Variables (arcsine-sqrt for proportions, log10 for others)",
+    y = "arcsine-sqrt(Read Counts)",
     shape = "Cycle",
     color = "Size Fraction"
   ) +
@@ -3449,12 +3879,19 @@ zoo_vs_pcr_grid <- ggplot(pcr_raw_zoo_coi_long,
 zoo_vs_pcr_grid
 
 # Compile correlation results into a clean summary table
-cor_summary_table <- cor_results_grid %>%
-  select(size_fraction, y_variable, x_variable, r, p_uncorrected, p_bonferroni, p_bh) %>%
+cor_summary_table_coi <- cor_results_grid %>%
+  mutate(
+    x_transform = case_when(
+      x_variable %in% c("arcsine-sqrt(Biomass Proportion)", "arcsine-sqrt(Relative Abundance)") ~ "arcsine-sqrt",
+      TRUE ~ "log10"
+    )
+  ) %>%
+  select(size_fraction, y_variable, x_variable, x_transform, r, p_uncorrected, p_bonferroni, p_bh) %>%
   rename(
     `Molecular Metric` = y_variable,
     `Size Fraction` = size_fraction,
     `Zooscan Metric` = x_variable,
+    `X-Axis Transformation` = x_transform,
     `Pearson R` = r,
     `p (Uncorrected)` = p_uncorrected,
     `p (BH)` = p_bh
@@ -3462,10 +3899,43 @@ cor_summary_table <- cor_results_grid %>%
   arrange(`Molecular Metric`, `Zooscan Metric`, `Size Fraction`)
 
 # View the table
-print(cor_summary_table)
+print(cor_summary_table_coi)
 
 # Optionally write to CSV
-write.csv(cor_summary_table, here("PCR_bias_correction/tables/correlation_summary_table_coi.csv"), row.names = FALSE)
+write.csv(cor_summary_table_coi, file.path(out_dir_tab, "correlation_summary_table_coi.csv"), row.names = FALSE)
+
+# Also save to root tables/ path (cycle-independent reference copy)
+dir.create(here("tables"), showWarnings = FALSE, recursive = TRUE)
+write.csv(cor_summary_table_coi, here("tables/correlation_summary_table_coi.csv"), row.names = FALSE)
+
+# Narrative description for COI correlations (0.2-0.5 mm size class focus)
+# PCR-RA = PCR Bias-Corrected Reads (n_reads_pcr), RRA = Raw Reads (n_reads_raw)
+get_coi_cor <- function(mol, zoo) {
+  cor_summary_table_coi %>%
+    filter(`Size Fraction` == "0.2-0.5",
+           `Molecular Metric` == mol,
+           `Zooscan Metric` == zoo)
+}
+
+pcr_bio  <- get_coi_cor("PCR Bias-Corrected Reads", "arcsine-sqrt(Biomass Proportion)")
+pcr_abnd <- get_coi_cor("PCR Bias-Corrected Reads", "arcsine-sqrt(Relative Abundance)")
+raw_bio  <- get_coi_cor("Raw Reads",                "arcsine-sqrt(Biomass Proportion)")
+raw_abnd <- get_coi_cor("Raw Reads",                "arcsine-sqrt(Relative Abundance)")
+
+fmt_r <- function(r) formatC(r, digits = 2, format = "f")
+fmt_p <- function(p) ifelse(p < 0.01, "<0.01", formatC(p, digits = 2, format = "f"))
+
+coi_narrative <- paste0(
+  "Although not significant, similar to 18S we found correlations for ZooScan relative abundance and biomass to display higher R for raw reads than for PCR bias-corrected reads for the 0.2-0.5 mm size class ",
+  "(PCR corrected: Rbiomass=", fmt_r(pcr_bio$`Pearson R`),   ", p=", fmt_p(pcr_bio$p_bonferroni),
+  "; Rabundance=", fmt_r(pcr_abnd$`Pearson R`),              ", p=", fmt_p(pcr_abnd$p_bonferroni),
+  "; Raw: Rbiomass=", fmt_r(raw_bio$`Pearson R`),            ", p=", fmt_p(raw_bio$p_bonferroni),
+  "; Rabundance=", fmt_r(raw_abnd$`Pearson R`),              ", p=", fmt_p(raw_abnd$p_bonferroni),
+  "). Across all metrics compared we did not observe any relationship between sampling environment (cycle) and the concordance of molecular and morphological metrics."
+)
+
+print(coi_narrative)
+
 
 
 #Just Absolute biomass
@@ -3556,7 +4026,7 @@ ggplot(pcr_vs_dryweight,
 methods_correlation_plot
 #PNG & PDF Save
 ggsave(
-  filename = here("figures/supporting_info/coi/coi_correlations.png"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/coi_correlations.png"),
   plot = methods_correlation_plot,
   dpi = 600,
   width =6, # Adjust width (inches) based on journal requirements
@@ -3565,7 +4035,7 @@ ggsave(
 )
 
 ggsave(
-  filename = here("figures/supporting_info/coi/coi_correlations.pdf"),
+  filename = file.path(out_dir_fig, "supporting_info/coi/coi_correlations.pdf"),
   plot = methods_correlation_plot,
   dpi = 600,
   width = 6, # Adjust width (inches) based on journal requirements
@@ -3573,6 +4043,250 @@ ggsave(
   units = "in"
 )
 
+
+# Biomass Proportion vs Read Counts with log10 biomass and arcsin-sqrt reads (COI) ----
+# Filter and reshape for plotting - include both raw and PCR corrected reads
+biomass_vs_rel_abundance <- pcr_raw_zoo_coi %>%
+  filter(!is.na(cycle)) %>%
+  select(sample_id, cycle, size_fraction, biomass_prop_taxa, n_reads_raw, n_reads_pcr) %>%
+  filter(biomass_prop_taxa > 0, biomass_prop_taxa <= 1) %>%
+  pivot_longer(cols = c(n_reads_raw, n_reads_pcr),
+               names_to = "y_variable", values_to = "y_value") %>%
+  filter(y_value >= 0) %>%
+  mutate(
+    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2")),
+    y_variable = factor(y_variable, levels = c("n_reads_raw", "n_reads_pcr"),
+                        labels = c("Raw Reads", "PCR-Corrected Reads"))
+  )
+
+# Number of comparisons = number of facet combinations
+n_tests <- biomass_vs_rel_abundance %>%
+  distinct(y_variable, size_fraction) %>%
+  nrow()
+
+# Compute Pearson correlation per facet combination
+cor_results_biomass_rel <- biomass_vs_rel_abundance %>%
+  group_by(y_variable, size_fraction) %>%
+  summarise(
+    cor_test = list(cor.test(
+      asin(sqrt(biomass_prop_taxa)),
+      asin(sqrt(y_value))
+    )),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    r = map_dbl(cor_test, ~ .x$estimate),
+    p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
+    p_bonferroni = pmin(p_uncorrected * n_tests, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
+    label = paste0(
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.01, "<0.01", formatC(p_bh, digits = 2, format = "f"))
+    )
+  )
+
+# Plot
+biomass_rel_plot <- ggplot(biomass_vs_rel_abundance,
+       aes(x = asin(sqrt(biomass_prop_taxa)),
+           y = asin(sqrt(y_value)),
+           fill = size_fraction)) +
+  geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
+  scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
+  scale_fill_manual(values = c("#5BA3D5", "#66CC66", "#FF4C38"), labels = size_fraction_labels, name = "Size Fraction") +
+  facet_grid(rows = vars(y_variable), cols = vars(size_fraction), scales = "free_y") +
+  labs(
+    x = "arcsine-sqrt(Biomass Proportion)",
+    y = "arcsine-sqrt Read Counts",
+    shape = "Cycle",
+    fill = "Size Fraction"
+  ) +
+  geom_text(
+    data = cor_results_biomass_rel,
+    aes(label = label),
+    x = 0.5, y = Inf,
+    hjust = 1, vjust = 1.5,
+    inherit.aes = FALSE,
+    size = 2.5, fontface = "italic"
+  )  +
+  guides(
+    fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
+    shape = guide_legend(override.aes = list(fill = "gray90", color = "black")),
+    color = "none"
+  ) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_line(color = "gray80", size = 0.5),
+    panel.grid.minor = element_line(color = "gray90", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif")
+  )
+
+biomass_rel_plot
+
+# PNG & PDF Save
+ggsave(
+  filename = file.path(out_dir_fig, "supporting_info/coi/biomass_proportion_vs_relative_abundance.png"),
+  plot = biomass_rel_plot,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+ggsave(
+  filename = file.path(out_dir_fig, "supporting_info/coi/biomass_proportion_vs_relative_abundance.pdf"),
+  plot = biomass_rel_plot,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+# Compile correlation results into a clean summary table
+cor_summary_biomass_rel <- cor_results_biomass_rel %>%
+  mutate(`Transformation` = "arcsine-sqrt both variables") %>%
+  select(size_fraction, `Transformation`, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  rename(
+    `Size Fraction` = size_fraction,
+    `Pearson R` = r,
+    `p (Uncorrected)` = p_uncorrected,
+    `p (BH)` = p_bh
+  ) %>%
+  arrange(`Size Fraction`)
+
+print(cor_summary_biomass_rel)
+
+# Write to CSV
+write.csv(cor_summary_biomass_rel, file.path(out_dir_tab, "biomass_proportion_vs_relative_abundance_correlations.csv"), row.names = FALSE)
+
+
+# Relative Abundance vs Read Counts with arcsin-sqrt on both (COI) ----
+# Filter and reshape for plotting - include both raw and PCR corrected reads
+relabund_vs_reads <- pcr_raw_zoo_coi %>%
+  filter(!is.na(cycle)) %>%
+  select(sample_id, cycle, size_fraction, relative_abundance, n_reads_raw, n_reads_pcr) %>%
+  filter(relative_abundance > 0, relative_abundance <= 1) %>%
+  pivot_longer(cols = c(n_reads_raw, n_reads_pcr),
+               names_to = "y_variable", values_to = "y_value") %>%
+  filter(y_value >= 0) %>%
+  mutate(
+    size_fraction = factor(size_fraction, levels = c("0.2-0.5", "0.5-1", "1-2")),
+    y_variable = factor(y_variable, levels = c("n_reads_raw", "n_reads_pcr"),
+                        labels = c("Raw Reads", "PCR-Corrected Reads"))
+  )
+
+# Number of comparisons = number of facet combinations
+n_tests_relabund <- relabund_vs_reads %>%
+  distinct(y_variable, size_fraction) %>%
+  nrow()
+
+# Compute Pearson correlation per facet combination
+cor_results_relabund_reads <- relabund_vs_reads %>%
+  group_by(y_variable, size_fraction) %>%
+  summarise(
+    cor_test = list(cor.test(
+      asin(sqrt(relative_abundance)),
+      asin(sqrt(y_value))
+    )),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    r = map_dbl(cor_test, ~ .x$estimate),
+    p_uncorrected = map_dbl(cor_test, ~ .x$p.value),
+    p_bonferroni = pmin(p_uncorrected * n_tests_relabund, 1),
+    p_bh = p.adjust(p_uncorrected, method = "BH"),
+    label = paste0(
+      "R = ", formatC(r, digits = 2, format = "f"), "\n",
+      "p = ", ifelse(p_bh < 0.01, "<0.01", formatC(p_bh, digits = 2, format = "f"))
+    )
+  )
+
+# Plot
+relabund_reads_plot <- ggplot(relabund_vs_reads,
+       aes(x = asin(sqrt(relative_abundance)),
+           y = asin(sqrt(y_value)),
+           fill = size_fraction)) +
+  geom_point(aes(shape = cycle), size = 3, stroke = 1.2, color = "black") +
+  scale_shape_manual(values = c("1" = 21, "2" = 22, "3" = 24, "T1" = 23, "T2" = 25)) +
+  scale_fill_manual(values = pastel_colors, labels = size_fraction_labels, name = "Size Fraction") +
+  facet_grid(rows = vars(y_variable), cols = vars(size_fraction), scales = "free_y") +
+  labs(
+    x = "arcsine-sqrt(Relative Abundance)",
+    y = "arcsine-sqrt Read Counts",
+    shape = "Cycle",
+    fill = "Size Fraction"
+  ) +
+  geom_text(
+    data = cor_results_relabund_reads,
+    aes(label = label),
+    x = 0.5, y = Inf,
+    hjust = 1, vjust = 1.5,
+    inherit.aes = FALSE,
+    size = 2.5, fontface = "italic"
+  )  +
+  guides(
+    fill = guide_legend(override.aes = list(shape = 21, size = 6, stroke = 1.2)),
+    shape = guide_legend(override.aes = list(fill = "gray90", color = "black")),
+    color = "none"
+  ) +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_line(color = "gray80", size = 0.5),
+    panel.grid.minor = element_line(color = "gray90", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 8, face = "bold", family = "serif"),
+    axis.text.x = element_text(angle = 0, hjust = 1, size = 8, face = "bold", family = "serif"),
+    axis.text.y = element_text(size = 8, face = "bold", family = "serif"),
+    axis.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.title = element_text(size = 8, face = "bold", family = "serif"),
+    legend.text = element_text(size = 8, family = "serif")
+  )
+
+relabund_reads_plot
+
+# PNG & PDF Save
+ggsave(
+  filename = file.path(out_dir_fig, "supporting_info/coi/coi_relative_abundance_vs_reads.png"),
+  plot = relabund_reads_plot,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+ggsave(
+  filename = file.path(out_dir_fig, "supporting_info/coi/coi_relative_abundance_vs_reads.pdf"),
+  plot = relabund_reads_plot,
+  dpi = 600,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+
+# Compile correlation results into a clean summary table
+cor_summary_relabund_reads <- cor_results_relabund_reads %>%
+  mutate(`Transformation` = "arcsine-sqrt both variables") %>%
+  select(size_fraction, y_variable, `Transformation`, r, p_uncorrected, p_bonferroni, p_bh) %>%
+  rename(
+    `Size Fraction` = size_fraction,
+    `Read Type` = y_variable,
+    `Pearson R` = r,
+    `p (Uncorrected)` = p_uncorrected,
+    `p (BH)` = p_bh
+  ) %>%
+  arrange(`Read Type`, `Size Fraction`)
+
+print(cor_summary_relabund_reads)
+
+# Write to CSV
+write.csv(cor_summary_relabund_reads, file.path(out_dir_tab, "coi_relative_abundance_vs_reads_correlations.csv"), row.names = FALSE)
 
 
 # Combined Analysis Compare COI, 18S, Zooscan -------------------------------------------------------

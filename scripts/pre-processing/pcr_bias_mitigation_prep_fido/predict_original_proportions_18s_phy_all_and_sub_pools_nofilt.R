@@ -23,13 +23,12 @@ if (!exists("target_cycle")) target_cycle <- 10
 ###Load in the filtered data for the 18s primer using long format species and hash name so I ca identify taxa
 ##First Size 1
 
-fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools_nocollodaria.csv"), header=TRUE, check.names = FALSE)%>%
-  #11/2024 sum in Salpidae
-  # mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
+fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools_nofilt.csv"), header=TRUE, check.names = FALSE) %>% 
   group_by(Family) %>%
   summarise(across(everything(), sum, na.rm = TRUE)) %>%
   ungroup() %>%
-  column_to_rownames("Family")
+  column_to_rownames("Family") %>%
+  dplyr::select(c(contains("All"),contains("A1"),contains("C5"),contains("S1")))
 
 #Metadata
 meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
@@ -42,7 +41,26 @@ meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>
     TRUE ~ NA_character_  # Default case
   )) %>%
   mutate(Run = factor(Run, levels = c("1", "2")))  # Explicitly define levels
-colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt)) 
+colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
+
+#Add in vars for onshore offshore
+# read in metadata
+metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv"))%>%
+  mutate(sample_id=Sample_ID_dot) %>%
+  select(sample_id,day_night_0_1, offshore_onshore) %>% 
+  distinct(.) 
+
+meta_18s <- meta_18s %>% 
+  left_join(metadata, by="sample_id")%>%
+  mutate(
+    offshore = ifelse(offshore_onshore == "offshore", 1, 0),
+    onshore = ifelse(offshore_onshore == "onshore", 1, 0),
+    day = ifelse(day_night_0_1 == 0, 1, 0),
+    night = ifelse(day_night_0_1 == 1, 1, 0)
+  ) %>%
+  replace_na(list(offshore = 0, onshore = 0, day = 0, night = 0)) %>% # Replace NA values with 0
+  select(-offshore_onshore, -day_night_0_1)  # Drop the original categorical columns
+
 
 ##Next, we need to make sure that the orders are the same between meta_18s and fido_input_filt
 meta_18s <- meta_18s[match(colnames(fido_input_filt), meta_18s$Sample_name),] 
@@ -52,7 +70,7 @@ meta_18s=meta_18s%>%
 
 #Model matrix
 #This will fit a linear model with an intercept for every sample (no global intercept because of the "-1") and a slope for cycle number
-X <- t(model.matrix(~ cycle_num+sample_num+Run  -1, data = meta_18s))
+X <- t(model.matrix(~ cycle_num+sample_num+Run+offshore+onshore+day+night  -1, data = meta_18s))
 Y_s1=fido_input_filt%>% as.matrix() 
 
 
@@ -109,7 +127,8 @@ X.tmp.s1["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
 X.tmp.s1 %>% as.data.frame() %>% rownames_to_column("sample") %>%
   select("sample") %>%
-  filter(!sample %in% c("sample_numCalibration","cycle_num","Run2"))%>% as.data.frame()->samples_to_loop 
+  filter(!sample %in% c("sample_numCalibration","cycle_num","Run2",
+                        "offshore","onshore","day","night"))%>% as.data.frame()->samples_to_loop 
 
 #Create a dataframe to fill with Cycle 0 proportions thru the loop
 final_data_s1 <- data.frame()
@@ -175,9 +194,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s1,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s1_phy_all_and_subpools_nocollodaria.csv")))
-
-
+write.csv(final_data_s1,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s1_phy_all_and_subpools_nofilt.csv")))
 
 
 
@@ -187,13 +204,13 @@ write.csv(final_data_s1,here(paste0("data/predicted_og/predicted_og_18s_",curren
 
 ############First 0.5-1############
 #Phyloseq Filtered
-fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools_nocollodaria.csv"), header=TRUE, check.names = FALSE)%>%
-  #11/2024 sum in Salpidae
-  # mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
+
+fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools_nofilt.csv"), header=TRUE, check.names = FALSE)%>%
   group_by(Family) %>%
   summarise(across(everything(), sum, na.rm = TRUE)) %>%
   ungroup() %>%
-  column_to_rownames("Family")
+  column_to_rownames("Family") %>%
+  dplyr::select(c(contains("All"),contains("A1"),contains("C5"),contains("s2")))
 
 #Metadata
 meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
@@ -203,11 +220,30 @@ meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>
     grepl("Pool", Sample_name) ~ "2",  # Prioritize "Pool" samples for Run 2
     grepl("\\.1|\\.2", Sample_name) ~ "1",  # Otherwise, assign Run 1 if it ends in .1 or .2
     grepl("\\.3", Sample_name) ~ "2",  # Assign Run 2 if it ends in .3
-    grepl("\\.4", Sample_name) ~ "2",  # Assign Run 2 if it ends in .4
+    grepl("\\.4", Sample_name) ~ "2",  # Assign Run 2 if it ends in .3
     TRUE ~ NA_character_  # Default case
   )) %>%
   mutate(Run = factor(Run, levels = c("1", "2")))  # Explicitly define levels
-colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt)) 
+colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
+
+#Add in vars for onshore offshore
+# read in metadata
+metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv"))%>%
+  mutate(sample_id=Sample_ID_dot) %>%
+  select(sample_id,day_night_0_1, offshore_onshore) %>% 
+  distinct(.) 
+
+meta_18s <- meta_18s %>% 
+  left_join(metadata, by="sample_id")%>%
+  mutate(
+    offshore = ifelse(offshore_onshore == "offshore", 1, 0),
+    onshore = ifelse(offshore_onshore == "onshore", 1, 0),
+    day = ifelse(day_night_0_1 == 0, 1, 0),
+    night = ifelse(day_night_0_1 == 1, 1, 0)
+  ) %>%
+  replace_na(list(offshore = 0, onshore = 0, day = 0, night = 0)) %>% # Replace NA values with 0
+  select(-offshore_onshore, -day_night_0_1)  # Drop the original categorical columns
+
 
 ##Next, we need to make sure that the orders are the same between meta_18s and fido_input_filt
 meta_18s <- meta_18s[match(colnames(fido_input_filt), meta_18s$Sample_name),] 
@@ -217,8 +253,11 @@ meta_18s=meta_18s%>%
 
 #Model matrix
 #This will fit a linear model with an intercept for every sample (no global intercept because of the "-1") and a slope for cycle number
-X <- t(model.matrix(~ cycle_num+sample_num+Run  -1, data = meta_18s))
+X <- t(model.matrix(~ cycle_num+sample_num+Run+offshore+onshore+day+night  -1, data = meta_18s))
 Y_s2=fido_input_filt%>% as.matrix() 
+
+
+
 
 
 
@@ -262,8 +301,8 @@ X.tmp.s2["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
 X.tmp.s2 %>% as.data.frame() %>% rownames_to_column("sample") %>%
   select("sample") %>%
-  filter(!sample %in% c("sample_numCalibration","cycle_num","Run2"))%>% as.data.frame()->samples_to_loop 
-
+  filter(!sample %in% c("sample_numCalibration","cycle_num","Run2",
+                        "offshore","onshore","day","night"))%>% as.data.frame()->samples_to_loop 
 #Create a dataframe to fill with Cycle 0 proportions thru the loop
 final_data_s2 <- data.frame()
 
@@ -328,7 +367,7 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s2,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools_nocollodaria.csv")))
+write.csv(final_data_s2,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s2_phy_all_and_subpools_nofilt.csv")))
 
 
 
@@ -338,13 +377,15 @@ write.csv(final_data_s2,here(paste0("data/predicted_og/predicted_og_18s_",curren
 ######### Final size
 ##### 1-2mm####
 #Phyloseq Filtered
-fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools_nocollodaria.csv"), header=TRUE, check.names = FALSE)%>%
+fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools_nofilt.csv"), header=TRUE, check.names = FALSE)%>%
   #11/2024 sum in Salpidae
   # mutate(Family = ifelse(Family == "Salpidae", "other", Family)) %>%
   group_by(Family) %>%
   summarise(across(everything(), sum, na.rm = TRUE)) %>%
   ungroup() %>%
-  column_to_rownames("Family")
+  column_to_rownames("Family")%>%
+  #Remove b3 pool
+  dplyr::select(c(contains("All"),contains("A1"),contains("C5"),contains("S3")))
 
 #Metadata
 meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
@@ -354,11 +395,29 @@ meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>
     grepl("Pool", Sample_name) ~ "2",  # Prioritize "Pool" samples for Run 2
     grepl("\\.1|\\.2", Sample_name) ~ "1",  # Otherwise, assign Run 1 if it ends in .1 or .2
     grepl("\\.3", Sample_name) ~ "2",  # Assign Run 2 if it ends in .3
-    grepl("\\.4", Sample_name) ~ "2",  # Assign Run 2 if it ends in .4
     TRUE ~ NA_character_  # Default case
   )) %>%
   mutate(Run = factor(Run, levels = c("1", "2")))  # Explicitly define levels
-colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt)) 
+colnames(fido_input_filt) <- gsub("^X", "", colnames(fido_input_filt))
+
+#Add in vars for onshore offshore
+# read in metadata
+metadata=read.csv(here("data/physical_environmental_data/env_metadata_impute_phyloseq_6.9.2023.csv"))%>%
+  mutate(sample_id=Sample_ID_dot) %>%
+  select(sample_id,day_night_0_1, offshore_onshore) %>% 
+  distinct(.) 
+
+meta_18s <- meta_18s %>% 
+  left_join(metadata, by="sample_id")%>%
+  mutate(
+    offshore = ifelse(offshore_onshore == "offshore", 1, 0),
+    onshore = ifelse(offshore_onshore == "onshore", 1, 0),
+    day = ifelse(day_night_0_1 == 0, 1, 0),
+    night = ifelse(day_night_0_1 == 1, 1, 0)
+  ) %>%
+  replace_na(list(offshore = 0, onshore = 0, day = 0, night = 0)) %>% # Replace NA values with 0
+  select(-offshore_onshore, -day_night_0_1)  # Drop the original categorical columns
+
 
 ##Next, we need to make sure that the orders are the same between meta_18s and fido_input_filt
 meta_18s <- meta_18s[match(colnames(fido_input_filt), meta_18s$Sample_name),] 
@@ -368,7 +427,7 @@ meta_18s=meta_18s%>%
 
 #Model matrix
 #This will fit a linear model with an intercept for every sample (no global intercept because of the "-1") and a slope for cycle number
-X <- t(model.matrix(~ cycle_num+sample_num+Run  -1, data = meta_18s))
+X <- t(model.matrix(~ cycle_num+sample_num+Run+offshore+onshore+day+night  -1, data = meta_18s))
 Y_s3=fido_input_filt%>% as.matrix() 
 
 
@@ -413,8 +472,8 @@ X.tmp.s3["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
 X.tmp.s3 %>% as.data.frame() %>% rownames_to_column("sample") %>%
   select("sample") %>%
-  filter(!sample %in% c("sample_numCalibration","cycle_num","Run2"))%>% as.data.frame()->samples_to_loop 
-
+  filter(!sample %in% c("sample_numCalibration","cycle_num","Run2",
+                        "offshore","onshore","day","night"))%>% as.data.frame()->samples_to_loop 
 #Create a dataframe to fill with Cycle 0 proportions thru the loop
 final_data_s3 <- data.frame()
 
@@ -479,5 +538,5 @@ beepr::beep(12)
 
 #Save final data
 current_date <- format(Sys.Date(), "%m_%d_%Y")
-write.csv(final_data_s3,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools_nocollodaria.csv")))
+write.csv(final_data_s3,here(paste0("data/predicted_og/predicted_og_18s_",current_date,"_s3_phy_all_and_subpools_nofilt.csv")))
 

@@ -20,8 +20,8 @@ asv18s_run2=read.csv(here("PCR_bias_correction/data/raw_reads/","ASV_table_18s_r
 
 
 #Taxa Tables using new combined taxa file between BLAST and Metazoogene
-taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s.csv")) %>% 
-  select(-X) %>% 
+taxa_18s=read.csv(here("PCR_bias_correction/data/taxa_files/blast_metazoo_18s_qc.csv")) %>% 
+  # select(-X) %>% 
   mutate(non_na_count = rowSums(!is.na(select(., -Hash)))) %>%
   group_by(Hash) %>%
   filter(rank(desc(non_na_count)) == 1) %>%
@@ -56,6 +56,22 @@ all_runs=bind_rows(run1_long,run2_long) %>%
 #Replace X
 colnames(all_runs) <- gsub("^X", "", colnames(all_runs))
 
+# Calculate sequencing depth per sample
+sequencing_depths <- colSums(all_runs)
+view(sequencing_depths)
+
+# Compute summary statistics
+mean_depth <- mean(sequencing_depths)
+sd_depth <- sd(sequencing_depths)
+median_depth <- median(sequencing_depths)
+
+# Print summary
+cat("Sequencing Depth Summary:\n")
+cat(sprintf("Mean ± SD: %.0f ± %.0f reads\n", mean_depth, sd_depth))
+cat(sprintf("Median: %.0f reads\n", median_depth))
+unique_asvs <- sum(rowSums(all_runs) > 0)
+cat(sprintf("Unique ASVs: %d\n", unique_asvs))
+
 
 #Identify OTUs that aren't in the taxa file
 
@@ -63,8 +79,9 @@ unidentified=all_runs %>%
   filter(rownames(all_runs) %in% setdiff(rownames(all_runs), rownames(taxa_18s))) %>% 
   mutate(total=rowSums(.))
 
-missing_counts=colSums(unidentified) %>% as.data.frame()
 
+missing_counts=colSums(unidentified) %>% as.data.frame()
+view(missing_counts)
 
 
 #Separate out by size
@@ -304,7 +321,7 @@ write.csv(tax18s_family,here("PCR_bias_correction/data/phyloseq_bio_data/18S/fid
 #Now including subpools, filter so that each final taxa is present in at least one 
 #sample in the final df
 # Step 1: Define experiments, treatments, and replicates
-experiments <- c("AllPool", "Pooled.A1.A3", "Pooled.B3.B5", "Pooled.C5.C7")
+experiments <- c("AllPool", "Pooled.A1.A3", "Pooled.C5.C7")
 treatments <- c("20C", "24C", "28C")
 replicates <- c("1", "2", "3")
 
@@ -336,7 +353,7 @@ filter_condition <- function(df, cols) {
 # Condition 2: Taxon must be at least x% of the total counts in its experiment-specific columns
 
 filter_percent_experiment <- function(df, all_cols, experiments) {
-  percent_set=0.01
+  percent_set=0.00001
   # Create a logical vector to track taxa that pass at least one experiment threshold
   taxa_passes <- rep(FALSE, nrow(df))
   
@@ -358,120 +375,102 @@ filter_percent_experiment <- function(df, all_cols, experiments) {
 }
 
 # Step 3: Apply both filters to the dataframe
-fido_taxa_filt <- fido_18s_s1_family_otu %>%
+# Filter out any non-existent columns from your dataframe
+all_cols <- all_cols[all_cols %in% names(fido_18s_s1_family_otu)]
+
+
+# Apply the filter across the dataframe
+fido_taxa_filt <- fido_18s_s1_family_otu%>%
   rownames_to_column("Hash") %>%
   filter(filter_condition(., all_cols) & filter_percent_experiment(., all_cols, experiments)) 
 
-# Step 4: Identify "other" taxa (not meeting the criteria)
 other <- fido_18s_s1_family_otu %>%
-  anti_join(fido_taxa_filt)
+  anti_join(fido_taxa_filt) 
 
-# Step 5: Visualization of taxa composition before proceeding
-other %>%
-  rownames_to_column("Hash") %>%
-  left_join(taxa_18s %>% rownames_to_column("Hash") %>% select(Hash, Order), by = "Hash") %>%
-  select(-Hash) %>%
-  pivot_longer(cols = -Order, names_to = "Category", values_to = "Value") %>%
-  group_by(Order, Category) %>%
-  summarize(taxa_sum = sum(Value), .groups = 'drop') %>%
-  ungroup() %>%
-  group_by(Category) %>%
-  mutate(sample_sum = sum(taxa_sum), prop = taxa_sum / sample_sum) %>%
-  ggplot(aes(x = Category, y = taxa_sum, fill = Order)) +
+
+#Check composition before proceeding
+
+#The other here would be Orders that weren't identified to that level, as with the NA
+other %>% 
+  rownames_to_column("Hash")%>% 
+  left_join(taxa_18s %>% rownames_to_column("Hash") %>% 
+              select(Hash,Order), by = "Hash") %>% 
+  select(-Hash) %>% 
+  pivot_longer(cols = -Order, names_to = "Category", values_to = "Value") %>% 
+  group_by(Order, Category) %>% 
+  summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
+  ungroup() %>%  group_by(Category) %>% 
+  mutate(sample_sum=sum(taxa_sum),prop=taxa_sum/sample_sum) %>% 
+  # filter(Order=="Calanoida") %>%
+  ggplot(., aes(x = Category, y = taxa_sum, fill = Order)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(title = "Stacked Bar Plot by Order",
        x = "Order",
        y = "Sum of Values",
-       fill = "Category") +
+       fill = "Category")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# View for the filtered taxa
-fido_taxa_filt %>%
-  left_join(taxa_18s %>% rownames_to_column("Hash") %>% select(Hash, Order), by = "Hash") %>%
-  select(-Hash) %>%
-  pivot_longer(cols = -Order, names_to = "Category", values_to = "Value") %>%
-  group_by(Order, Category) %>%
-  summarize(taxa_sum = sum(Value), .groups = 'drop') %>%
-  ungroup() %>%
-  group_by(Category) %>%
-  mutate(sample_sum = sum(taxa_sum), prop = taxa_sum / sample_sum) %>%
-  ggplot(aes(x = Category, y = taxa_sum, fill = Order)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(title = "Stacked Bar Plot by Order",
-       x = "Order",
-       y = "Sum of Values",
-       fill = "Category") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# Save plot if needed
-# ggsave(here("plots/pre_processing/QC/other_order_composition_s1.png"), width = 10, height = 6, units = "in")
-# ggsave(here("plots/pre_processing/QC/other_order_composition_s1.pdf"), width = 18, height = 6, units = "in")
+other %>% 
+  summarise_all(sum) %>% 
+  mutate(Hash = "other")->other
 
-# Remove "other" from `fido_18s_s1_family_otu`
-other %>%
-  summarise_all(sum) %>%
-  mutate(Hash = "other") -> other
-
-# Step 6: Identify columns where 'other' exceeds 20% of total sample counts
+#Find columns where other exceeds threshold of the sample total
+# Step 1: Calculate column sums for both DataFrames
 sums_other <- colSums(other %>% select(-Hash))
 sums_fido <- colSums(fido_18s_s1_family_otu)
 
-thresholds <- sums_fido * 0.2
+# Step 2: Calculate threshold of the column sums of fido_18s_s3_family_otu
+thresholds <- sums_fido * 0.5
+
+# Step 3: Identify columns where the sum of `other` is greater than threshold of the sum of `fido_18s_s1_family_otu`
 columns_to_remove <- names(which(sums_other > thresholds))
 
-# Remove these columns
+# Step 4: Remove these columns from the fido_18s_s3_family_otu DataFrame
 fido_taxa_filt <- fido_taxa_filt %>% select(-all_of(columns_to_remove))
-other <- other %>% select(-all_of(columns_to_remove))
+other=other%>% select(-all_of(columns_to_remove))
 
-# Step 7: Combine data
-fido_18s_s1_final <- rbind(fido_taxa_filt, other) %>%
-  group_by(Hash) %>%
-  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+
+# Combine data
+fido_18s_s1_final <- rbind(fido_taxa_filt,other)  %>% 
+  group_by(Hash) %>% 
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>% 
   column_to_rownames("Hash")
 
-colSums(fido_18s_s1_family_otu)[1:5]
-colSums(fido_18s_s1_final)[1:5]
-
-# Step 8: Join with taxonomy file
-fido_18s_s1_save_family_phy <- fido_18s_s1_final %>%
-  rownames_to_column("Hash") %>%
-  left_join(fido_18s_s1_family_taxa %>% rownames_to_column("Hash"), by = "Hash") %>%
+#Join with taxa file
+fido_18s_s1_final %>%
+  rownames_to_column("Hash")%>%
+  #Add taxa hash
+  left_join(fido_18s_s1_family_taxa %>% rownames_to_column("Hash"), by="Hash")%>%
   mutate(Family = if_else(
     Family == "other" & Order != "other",
     paste0("unidentified ", Order),
     Family
-  )) %>%
-  mutate(Family = ifelse(Hash == "other", "other", Family)) %>%
+  )) %>% 
   select(-Phylum, -Class, -Genus, -Order, -Species, -Hash) %>%
-  group_by(Family) %>%
-  summarise(across(where(is.numeric), sum, na.rm = TRUE))
+  group_by(Family) %>% 
+  summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s1_save_family_phy_nofilt
 
-  
-  
-  #Save
-  write.csv(fido_18s_s1_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools.csv"))
-
-# Remove "unidentified Collodaria"
-
-fido_18s_s1_save_family_phy_nocollo= fido_18s_s1_save_family_phy %>%
-  filter(Family != "unidentified Collodaria") %>% 
-  pivot_longer(cols = -Family, names_to = "sample", values_to = "read_count") %>%
-  # filter(!str_detect(sample, "All")) %>%
-  mutate(global_median = median(read_count, na.rm = TRUE)) %>%
-  group_by(sample) %>%
-  mutate(sample_median = median(read_count, na.rm = TRUE)) %>%
-  ungroup() %>%
-  mutate(norm_read_count = round(read_count * (global_median / sample_median))) %>%
-  select(Family, sample, norm_read_count) %>%
-  pivot_wider(names_from = sample, values_from = norm_read_count)
+fido_18s_s1_save_family_phy_nofilt%>% 
+  pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
+  group_by(Family, Category) %>% 
+  summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
+  ungroup() %>%  group_by(Category) %>% 
+  mutate(sample_sum=sum(taxa_sum),prop=taxa_sum/sample_sum) %>% 
+  ggplot(., aes(x = Category, y = taxa_sum, fill = Family)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Stacked Bar Plot by Order",
+       x = "Family",
+       y = "Sum of Values",
+       fill = "Category")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # Save cleaned dataset
-write.csv(fido_18s_s1_save_family_phy_nocollo, 
-          here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools_nocollodaria.csv"), 
+write.csv(fido_18s_s1_save_family_phy_nofilt, 
+          here("PCR_bias_correction/data/fido/phy/fido_18s_s1_family_phy_all_subpools_nofilt.csv"), 
           row.names = FALSE)
-
 
 ## ==== s2 ====
 # Filter out any non-existent columns from your dataframe
@@ -521,7 +520,7 @@ sums_other <- colSums(other %>% select(-Hash))
 sums_fido <- colSums(fido_18s_s2_family_otu)
 
 # Step 2: Calculate threshold of the column sums of fido_18s_s3_family_otu
-thresholds <- sums_fido * 0.2
+thresholds <- sums_fido * 0.5
 
 # Step 3: Identify columns where the sum of `other` is greater than threshold of the sum of `fido_18s_s2_family_otu`
 columns_to_remove <- names(which(sums_other > thresholds))
@@ -549,12 +548,9 @@ fido_18s_s2_final %>%
   )) %>% 
   select(-Phylum, -Class, -Genus, -Order, -Species, -Hash) %>%
   group_by(Family) %>% 
-  summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s2_save_family_phy
+  summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s2_save_family_phy_nofilt
 
-#Save
-write.csv(fido_18s_s2_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools.csv"))
-
-fido_18s_s2_save_family_phy%>% 
+fido_18s_s2_save_family_phy_nofilt%>% 
   pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
   group_by(Family, Category) %>% 
   summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
@@ -568,14 +564,10 @@ fido_18s_s2_save_family_phy%>%
        y = "Sum of Values",
        fill = "Category")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-# Remove "unidentified Collodaria"
-
-fido_18s_s2_save_family_phy_nocollo <- fido_18s_s2_save_family_phy %>%
-  filter(Family != "unidentified Collodaria") 
 
 # Save cleaned dataset
-write.csv(fido_18s_s2_save_family_phy_nocollo, 
-          here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools_nocollodaria.csv"), 
+write.csv(fido_18s_s2_save_family_phy_nofilt, 
+          here("PCR_bias_correction/data/fido/phy/fido_18s_s2_family_phy_all_subpools_nofilt.csv"), 
           row.names = FALSE)
 
 
@@ -631,7 +623,7 @@ sums_other <- colSums(other)
 sums_fido <- colSums(fido_18s_s3_family_otu)
 
 # Step 2: Calculate threshold of the column sums of fido_18s_s3_family_otu
-thresholds <- sums_fido * 0.20
+thresholds <- sums_fido * 0.50
 
 # Step 3: Identify columns where the sum of `other` is greater than threshold of the sum of `fido_18s_s3_family_otu`
 columns_to_remove <- names(which(sums_other > thresholds))
@@ -683,12 +675,12 @@ fido_18s_s3_final %>%
   )) %>% 
   select(-Phylum, -Class, -Genus, -Order, -Species, -Hash) %>%
   group_by(Family) %>% 
-  summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s3_save_family_phy
+  summarise(across(where(is.numeric), sum, na.rm = TRUE))->fido_18s_s3_save_family_phy_nofilt
 
 #Save
-write.csv(fido_18s_s3_save_family_phy,here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools.csv"))
+write.csv(fido_18s_s3_save_family_phy_nofilt,here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools_nofilt.csv"))
 
-fido_18s_s3_save_family_phy%>% 
+fido_18s_s3_save_family_phy_nofilt%>% 
   pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
   group_by(Family, Category) %>% 
   summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
@@ -703,19 +695,10 @@ fido_18s_s3_save_family_phy%>%
        fill = "Category")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-#Save a version without Collodaria, normalized to the median # of reads
-# Remove "unidentified Collodaria"
 
-fido_18s_s3_save_family_phy_nocollo <- fido_18s_s3_save_family_phy %>%
-  filter(Family != "unidentified Collodaria") 
 
-# Save cleaned dataset
-write.csv(fido_18s_s3_save_family_phy_nocollo, 
-          here("PCR_bias_correction/data/fido/phy/fido_18s_s3_family_phy_all_subpools_nocollodaria.csv"), 
-          row.names = FALSE)
-
-#Visualize
-fido_18s_s3_save_family_phy_nocollo%>% 
+#Visualize Sample Composition
+fido_18s_s3_save_family_phy_nofilt%>% 
   pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>% 
   group_by(Family, Category) %>% 
   summarize(taxa_sum = sum(Value), .groups = 'drop') %>% 
@@ -840,144 +823,3 @@ ggsave(filename = paste0(save_path2, ".pdf"), plot = p2, width = 14, height = 10
 ggsave(filename = paste0(save_path2, ".png"), plot = p2, width = 14, height = 10, dpi = 300)
 
 
-
-
-# Extra and Scrap ---------------------------------------------------------
-
-#1) Examine how thresholding impacts composition
-# Define the percent thresholds to test
-percent_values <- c(0.05, 0.01, 0.005, 0.001)
-
-# Function to filter data by percent threshold
-filter_percent_experiment <- function(df, all_cols, experiments, percent_set) {
-  taxa_passes <- rep(FALSE, nrow(df))
-  
-  for (exp in experiments) {
-    exp_cols <- all_cols[grep(exp, all_cols)]
-    
-    if (length(exp_cols) > 0) {
-      total_exp_counts <- colSums(df[exp_cols], na.rm = TRUE)
-      min_threshold <- sum(total_exp_counts) * percent_set
-      
-      taxa_passes <- taxa_passes | rowSums(df[exp_cols], na.rm = TRUE) >= min_threshold
-    }
-  }
-  
-  return(taxa_passes)
-}
-
-# Create an empty list to store results
-filtered_data_list <- list()
-
-# Loop over different percent_set values
-for (percent_set in percent_values) {
-  filtered_taxa <- fido_18s_s1_family_otu %>%
-    rownames_to_column("Hash") %>%
-    filter(filter_condition(., all_cols) & filter_percent_experiment(., all_cols, experiments, percent_set)) %>%
-    mutate(percent_set = as.factor(percent_set))  # Store percent value for plotting
-  
-  # Store in the list
-  filtered_data_list[[as.character(percent_set)]] <- filtered_taxa
-}
-
-# Combine all filtered data into one dataframe
-filtered_data_combined <- bind_rows(filtered_data_list)
-
-# Count number of families retained at each percentage
-family_counts <- filtered_data_combined %>%
-  left_join(taxa_18s %>% rownames_to_column("Hash") %>% select(Hash, Family), by = "Hash") %>%
-  group_by(percent_set) %>%
-  summarise(families_retained = n_distinct(Family), .groups = "drop")
-
-# Join with taxa file and prepare for plotting
-plot_data <- filtered_data_combined %>%
-  left_join(taxa_18s %>% rownames_to_column("Hash") %>% select(Hash, Family), by = "Hash") %>%
-  select(-Hash) %>%
-  pivot_longer(cols = -c(Family, percent_set), names_to = "Category", values_to = "Value") %>%
-  group_by(Family, percent_set, Category) %>%
-  summarize(taxa_sum = sum(Value), .groups = 'drop') %>%
-  ungroup() %>%
-  group_by(percent_set, Category) %>%
-  mutate(sample_sum = sum(taxa_sum), prop = taxa_sum / sample_sum)
-
-# Merge with family counts for annotations
-plot_data <- plot_data %>%
-  left_join(family_counts, by = "percent_set")
-
-# Create stacked bar plot
-ggplot(plot_data, aes(x = percent_set, y = prop, fill = Family)) +
-  geom_bar(stat = "identity") +
-  
-  # Color Palette
-  scale_fill_viridis_d(option = "C", direction = -1) +
-  
-  # Add text annotations for # of families retained
-  geom_text(aes(label = families_retained), 
-            stat = "identity", vjust = -1.5, size = 6, fontface = "bold") +
-  
-  theme_minimal() +
-  labs(title = "Taxa Retained Across Different Percent Thresholds",
-       x = "Percent Threshold",
-       y = "Proportion of Counts",
-       fill = "Taxa") +
-  
-  # Improve aesthetics for publication
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
-        axis.text.y = element_text(size = 14),
-        axis.title = element_text(size = 16, face = "bold"),
-        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-        strip.text = element_text(size = 16),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 14),
-        legend.key.size = unit(1.2, "lines"),
-        legend.position = "right")
-
-
-# #Finally, just for Salpidae, absolute abundance
-# # Define custom color for Salpidae
-# taxa_colors <- c("Salpidae" = "#FFB6C1")  # Pastel pink for Salpidae
-# 
-# # Function to process each dataset for Salpidae (absolute abundance)
-# process_salpidae_data <- function(df, dataset_name) {
-#   df %>%
-#     pivot_longer(cols = -Family, names_to = "Category", values_to = "Value") %>%
-#     filter(Family == "Salpidae") %>%  # Keep only Salpidae
-#     group_by(Family, Category) %>%
-#     summarize(taxa_sum = sum(Value), .groups = 'drop') %>%
-#     mutate(Dataset = dataset_name)
-# }
-# 
-# # Process datasets separately
-# plot_data_s1 <- process_salpidae_data(fido_18s_s1_save_family_phy, "S1")
-# plot_data_s2 <- process_salpidae_data(fido_18s_s2_save_family_phy, "S2")
-# plot_data_s3 <- process_salpidae_data(fido_18s_s3_save_family_phy, "S3")
-# 
-# # Function to create an absolute abundance stacked bar plot for Salpidae
-# create_salpidae_plot <- function(data, dataset_name) {
-#   ggplot(data, aes(x = Category, y = taxa_sum, fill = Family)) +
-#     geom_bar(stat = "identity") +  # Absolute abundance
-#     scale_fill_manual(values = taxa_colors) +  
-#     theme_minimal() +
-#     labs(
-#       title = paste("Absolute Abundance of Salpidae (", dataset_name, ")", sep = ""),
-#       x = "Sample",
-#       y = "Absolute Abundance",
-#       fill = "Taxa"
-#     ) +
-#     theme(axis.text.x = element_text(angle = 45, hjust = 1))
-# }
-# 
-# # Create separate plots for each dataset
-# p1 <- create_salpidae_plot(plot_data_s1, "S1")
-# p2 <- create_salpidae_plot(plot_data_s2, "S2")
-# p3 <- create_salpidae_plot(plot_data_s3, "S3")
-#                            
-# 
-# # Arrange plots in a 3-row grid layout without shared x-axes
-# final_plot3 <- p1 / p2 / p3  # Stitches them vertically with their own x-axes
-# final_plot3
-# 
-# # Save first plot
-# save_path3 <- here("figures/miscellaneous/calibration_experiment_taxa_proportions_18s_salpidae")
-# ggsave(filename = paste0(save_path3, ".pdf"), plot = final_plot3, width = 14, height = 12, dpi = 300)
-# ggsave(filename = paste0(save_path3, ".png"), plot = final_plot3, width = 14, height = 12, dpi = 300)

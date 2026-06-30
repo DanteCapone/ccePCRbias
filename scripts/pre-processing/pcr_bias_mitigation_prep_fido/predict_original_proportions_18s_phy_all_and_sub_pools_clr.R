@@ -1,4 +1,4 @@
-﻿
+
 #Script Using Fido to Predict the DNA Proportions in each sample at PCR Cycle 0
 
 # Libraries, data, etc ----------------------------------------------------
@@ -15,6 +15,9 @@ library(here)
 library(gridExtra)
 here()
 
+# Back-extrapolation target cycle (see scripts/pcr_correction_pipeline/config.R)
+if (!exists("target_cycle")) target_cycle <- 10
+
 
 
 ###Load in the filtered data for the 18s primer using long format species and hash name so I ca identify taxa
@@ -29,7 +32,7 @@ fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s1_family_phy_all_subpools
   column_to_rownames("Family")
 
 #Metadata
-meta_18s=read.csv(file.path("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt)) %>%
   mutate(Run = case_when(
@@ -97,6 +100,7 @@ fit_s1 <- to_clr(fit)
 
 X.tmp.s1 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s1) <- rownames(X)
+X.tmp.s1["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -119,7 +123,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s1 <- predict(fit_s1, newdata=X.tmp.s1, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("0.2-0.5mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
@@ -185,7 +189,7 @@ fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s2_family_phy_all_subpools
   column_to_rownames("Family")
 
 #Metadata
-meta_18s=read.csv(file.path("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt)) %>%
   mutate(Run = case_when(
@@ -239,6 +243,7 @@ fit_s2 <- to_clr(fit)
 
 X.tmp.s2 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s2) <- rownames(X)
+X.tmp.s2["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -261,7 +266,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s2 <- predict(fit_s2, newdata=X.tmp.s2, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("0.5-1mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
@@ -330,7 +335,7 @@ fido_input_filt=read.csv(here("data/fido/phy/fido_18s_s3_family_phy_all_subpools
 
 
 #Metadata
-meta_18s=read.csv(file.path("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
+meta_18s=read.csv(here("data/fido/meta_18s_unaveraged_all.csv"), header=TRUE) %>% 
   select(-c(X)) %>%
   filter(Sample_name %in% colnames(fido_input_filt)) %>%
   mutate(Run = case_when(
@@ -382,6 +387,7 @@ fit_s3 <- to_clr(fit)
 
 X.tmp.s3 <- matrix(0, nrow(X), 1) #Create fake covariate data to predict the regression line based on 
 rownames(X.tmp.s3) <- rownames(X)
+X.tmp.s3["cycle_num", ] <- target_cycle  # evaluate fitted line at target_cycle
 
 
 #Samples to loop thru-for each iteration of the loop I will set the one I want to predict on to '1' from '0'
@@ -404,7 +410,7 @@ for(s in samples_to_loop$sample){
   
   #
   predicted_s3 <- predict(fit_s3, newdata=X.tmp.s3, summary=TRUE) %>% 
-    mutate(cycle_num = c(0)[sample])%>%
+    mutate(cycle_num = c(target_cycle)[sample])%>%
     mutate(size=rep("1-2mm"))%>%
     mutate(coord = str_replace(coord, "^prop_", "")) %>%
     rename(n_reads = mean) %>%
